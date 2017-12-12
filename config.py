@@ -3,25 +3,41 @@ import os
 
 FLAGS = tf.app.flags.FLAGS
 
+cwd = os.getcwd()
+data_dir = os.path.join(cwd, 'data')
+sample_dir = os.path.join(cwd,'logs', "sample")
+summary_dir = os.path.join(cwd,'logs', "summary")
+
 # Data
-tf.app.flags.DEFINE_string('root_dir', os.getcwd(), """Base Path""")
-tf.app.flags.DEFINE_string('dataset_dir', os.path.join(FLAGS.root_dir, 'data'), """Path to data""")
+tf.app.flags.DEFINE_string('root_dir', cwd, """Base Path""")
+tf.app.flags.DEFINE_string('dataset_dir', data_dir, """Path to data""")
+tf.app.flags.DEFINE_integer('h', 256, """Height images""")
+tf.app.flags.DEFINE_integer('w', 256, """Width of images""")
 tf.app.flags.DEFINE_integer('c', 1, """Number of input channels of images""")
 tf.app.flags.DEFINE_string('dataset', "mnist", """mnist or CIFAR or imagenet""")
 tf.app.flags.DEFINE_boolean('numpy_rec', False, """Are numpy records of data complete?""")
 
 # Training
-tf.app.flags.DEFINE_integer('batch_size', 64, """Batch size""")
+tf.app.flags.DEFINE_integer('batch_size', 1, """Batch size""")
 tf.app.flags.DEFINE_integer('MAX_iterations', 1000, """Max iterations for training""")
 tf.app.flags.DEFINE_integer('ckpt_frq', 100, """Frequency at which to checkpoint the model""")
 tf.app.flags.DEFINE_integer('train_size', 10000, """The total training size""")
 tf.app.flags.DEFINE_integer('display', 1, """Display log of progress""")
+tf.app.flags.DEFINE_integer('code_len', 8, """Length of latent dimension""")
 tf.app.flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 tf.app.flags.DEFINE_float('lr_decay', 0.9, """Learning rate decay factor""")
-tf.app.flags.DEFINE_float('base_lr', 1e-6, """Base learning rate for VAE""")
+tf.app.flags.DEFINE_float('base_lr', 0.0002, """Base learning rate for VAE""")
 tf.app.flags.DEFINE_boolean('train', False, """Training or testing""")
 tf.app.flags.DEFINE_boolean('resume', False, """Resume the training ?""")
 
+# Loss specific
+tf.app.flags.DEFINE_float('lambda_img', 10, """Parameter to balance the loss""")
+tf.app.flags.DEFINE_float('lambda_latent', 0.5, """Parameter to balance the loss""")
+tf.app.flags.DEFINE_float('lambda_kl', 0.01, """Parameter to balance the loss""")
+
 # Model Saving
-tf.app.flags.DEFINE_string('sample_dir', os.path.join(FLAGS.root_dir,'logs', "sample"), """Generate sample images""")
-tf.app.flags.DEFINE_string('summary_dir', os.path.join(FLAGS.root_dir, 'logs', "summary"), """Summaries directory including checkpoints""")
+tf.app.flags.DEFINE_string('sample_dir', sample_dir, """Generate sample images""")
+tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory including checkpoints""")
+
+# Architecture
+tf.app.flags.DEFINE_string('encoder_type', 'normal', """Type of the network, {Normal or Residual Network}""")
