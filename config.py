@@ -40,4 +40,13 @@ tf.app.flags.DEFINE_string('sample_dir', sample_dir, """Generate sample images""
 tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory including checkpoints""")
 
 # Architecture
-tf.app.flags.DEFINE_string('encoder_type', 'normal', """Type of the network, {Normal or Residual Network}""")
+tf.app.flags.DEFINE_string('e_type', 'normal', """Type of the network, {normal or residual}""")
+tf.app.flags.DEFINE_integer('e_layers', 3, """Number of layers in the encoder network""")
+tf.app.flags.DEFINE_integer('e_kernels', 64 """Number of kernels for the first layer of encoder""")
+tf.app.flags.DEFINE_string('e_nonlin', 'relu', """Type of non-linearity for the encoder network {relu or lrelu}""")
+tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noise the generator network {input or all}""")
+
+
+# Testing
+tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
+tf.app.flags.DEFINE_string('image', '', """Path of the input image to test the network""")

@@ -79,14 +79,23 @@ def max_pool(input, kernel=3, stride=2, name=None):
       ksize = [1, kernel, kernel, 1]
       strides = [1, stride, stride, 1]
       output = tf.nn.max_pool(input, ksize=ksize, strides=strides, padding='SAME')
-
       return output
 
+def average_pool(input, ksize=3, strides=3, padding='VALID', name=None):
+   """Average Pooling layer
+   """
+   if name is None:
+      name='avg_pool'
+
+   with tf.variable_scope(name):
+      ksize = [1, ksize, ksize, 1]
+      strides = [1, strides, strides, 1]
+      output = tf.nn.avg_pool(input, ksize=ksize, strides=strides, padding=padding)
+      return output
 
 def fully_connected(input, output_neurons, name=None, reuse=False,
    bias_constant=0.01, initializer=tf.contrib.layers.xavier_initializer()):
-   """
-   Fully-connected linear activations
+   """Fully-connected linear activations
    """
    if name is None:
       name='fully_connected'
@@ -102,8 +111,7 @@ def fully_connected(input, output_neurons, name=None, reuse=False,
 
 
 def dropout_layer(input, keep_prob=0.5, name=None):
-   """
-   Dropout layer
+   """Dropout layer
    """
    if name is None:
       name='Dropout'
