@@ -20,11 +20,15 @@ def main(_):
    create_rundirs(FLAGS, idx)
    dump_model_params(FLAGS)
 
-   net = nnet.Model(FLAGS, FLAGS.train)
-   print 'Training the network...'
-   net.train()
-   print 'Done training the network...'
-
+   if FLAGS.train:
+      net = nnet.Model(FLAGS, FLAGS.train)
+      print 'Training the network...'
+      net.train()
+      print 'Done training the network...'
+   else:
+      print 'Testing the model...'
+      net = nnet.Model(FLAGS, False)
+      net.test(FLAGS.image)
 
 if __name__ == '__main__':
    try:
