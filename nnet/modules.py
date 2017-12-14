@@ -120,7 +120,6 @@ def dropout_layer(input, keep_prob=0.5, name=None):
       output = tf.nn.dropout(input, keep_prob=keep_prob)
       return output
 
-
 def relu(input_layer, name=None):
    """
    ReLU activation
@@ -131,6 +130,15 @@ def relu(input_layer, name=None):
    with tf.variable_scope(name):
       return tf.nn.relu(input_layer)
 
+def tanh(input_layer, name=None):
+   """
+   Tanh activation
+   """
+   if name is None:
+      name = "tanh"
+
+   with tf.variable_scope(name):
+      return tf.nn.tanh(input_layer)
 
 def leaky_relu(input, alpha=0.2, name=None):
    """
@@ -141,7 +149,6 @@ def leaky_relu(input, alpha=0.2, name=None):
 
    with tf.variable_scope(name):
       return tf.maximum(input, alpha * input)
-
 
 def batch_normalize(input_layer, is_training, reuse=False, name=None):
    """
@@ -208,8 +215,7 @@ def dconv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1, nam
 
 
 def residual_block(input_layer, output_channels, is_training, stride=1, first_block=False, name=None, reuse=False):
-   """
-   Builds a residual block
+   """Builds a residual block
    Series of operations include : 
       -> bactch_norm
       -> relu
