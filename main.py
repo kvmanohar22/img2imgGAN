@@ -20,6 +20,11 @@ def main(_):
    create_rundirs(FLAGS, idx)
    dump_model_params(FLAGS)
 
+   if FLAGS.archi:
+      net = nnet.Model(FLAGS, False)
+      net.test_graph()
+      exit()
+
    if FLAGS.train:
       net = nnet.Model(FLAGS, FLAGS.train)
       print 'Training the network...'

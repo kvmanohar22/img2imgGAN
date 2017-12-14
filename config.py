@@ -8,6 +8,8 @@ data_dir = os.path.join(cwd, 'data')
 sample_dir = os.path.join(cwd,'logs', "sample")
 summary_dir = os.path.join(cwd,'logs', "summary")
 
+tf.app.flags.DEFINE_boolean('archi', False, """Test the architecture of the network?""")
+
 # Data
 tf.app.flags.DEFINE_string('root_dir', cwd, """Base Path""")
 tf.app.flags.DEFINE_string('dataset_dir', data_dir, """Path to data""")
@@ -42,9 +44,13 @@ tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory in
 # Architecture
 tf.app.flags.DEFINE_string('e_type', 'normal', """Type of the network, {normal or residual}""")
 tf.app.flags.DEFINE_integer('e_layers', 3, """Number of layers in the encoder network""")
-tf.app.flags.DEFINE_integer('e_kernels', 64 """Number of kernels for the first layer of encoder""")
+tf.app.flags.DEFINE_integer('e_kernels', 64, """Number of kernels for the first layer of encoder""")
 tf.app.flags.DEFINE_string('e_nonlin', 'relu', """Type of non-linearity for the encoder network {relu or lrelu}""")
+# Generator
 tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noise the generator network {input or all}""")
+tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator network""")
+tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
+tf.app.flags.DEFINE_string('g_nonlin', 'lrelu', """Type of non-linearity for the generator network {relu or lrelu}""")
 
 
 # Testing

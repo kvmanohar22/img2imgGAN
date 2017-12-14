@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import time
 import os
+import sys
 import re
 from datetime import datetime
 
@@ -32,12 +33,16 @@ class Model(object):
    def build_graph(self):
       """Generate various parts of the graph
       """
+      self.non_lin = {'relu' : lambda x: relu(x),
+                      'lrelu': lambda x: lrelu(x),
+                      'tanh' : lambda x: tanh(x)
+                     }
       self.placeholders()
       self.E  = self.encoder(self.target_images, self.opts.e_layers,
          self.opts.e_kernels, self.opts.e_nonlin)
       self.G  = self.generator(self.input_images, self.code)
-      self.D  = self.discriminator(self.input_images, reuse=False)
-      self.D_ = self.discriminator(self.G, reuse=True)
+      # self.D  = self.discriminator(self.input_images, reuse=False)
+      # self.D_ = self.discriminator(self.G, reuse=True)
       self.summaries()
 
    def placeholders(self):
@@ -45,7 +50,7 @@ class Model(object):
       """
       self.input_images = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="input_images")
       self.target_images = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="target_images")
-      self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
+      self.code = tf.placeholder(tf.float32, [None, self.h, self.w, self.opts.code_len], name="code")
       self.is_training = tf.placeholder(tf.bool, name="is_training")
 
    def summaries(self):
@@ -53,7 +58,7 @@ class Model(object):
       """
       in_images = tf.summary.image('Input_images', self.input_images, max_outputs=10)
       tr_images = tf.summary.image('Target_images', self.target_images, max_outputs=10)
-      # gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
+      gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
       self.summaries = tf.summary.merge_all()
 
    def encoder(self, image, num_layers=3, kernels=64, non_linearity='relu'):
@@ -65,7 +70,8 @@ class Model(object):
       Returns:
          The encoded latent code
       """
-      with tf.name_scope('encoder'):
+      self.e_layers = {}
+      with tf.variable_scope('encoder'):
          if self.opts.e_type == "normal":
             return self.normal_encoder(image, num_layers=num_layers, output_neurons=8,
                kernels=kernels, non_linearity=non_linearity)
@@ -78,8 +84,7 @@ class Model(object):
    def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_linearity='relu'):
       """Few convolutional layers followed by downsampling layers
       """
-      k, s = 4, 1
-      self.e_layers = {}
+      k, s = 4, 2
       self.e_layers['conv0'] = conv2d(image, kernel=k, out_channels=kernels*1, stride=s, name='conv0')
       for idx in range(1, num_layers):
          input_layer = self.e_layers['conv{}'.format(idx-1)]
@@ -87,12 +92,11 @@ class Model(object):
          self.e_layers['conv{}'.format(idx)] = conv2d(input_layer, kernel=k,
             out_channels=kernels*factor, stride=s, name='conv{}'.format(idx)) 
          input_layer = self.e_layers['conv{}'.format(idx)]
-         if non_linearity == 'relu':
-            self.e_layers['conv{}'.format(idx)] = relu(input_layer)
-         elif non_linearity == 'leaky_relu':
-            self.e_layers['conv{}'.format(idx)] = lrelu(input_layer)
-         else:
-            raise NotImplementedError("No such non-linearity exists!")
+         try:
+            self.e_layers['conv{}'.format(idx)] = self.non_lin[
+               non_linearity](input_layer)
+         except KeyError:
+            raise KeyError("No such non-linearity is available!")
       self.e_layers['pool'] = average_pool(self.e_layers['conv{}'.format(num_layers-1)],
          ksize=8, strides=8, name='pool')
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
@@ -105,42 +109,86 @@ class Model(object):
       """
       pass
 
-   def generator(self, image, z):
+   def generator(self, image, z, layers=3, kernel=64, non_lin='relu'):
       """Generator graph of GAN
 
       Args:
-         image: Conditioned image on which the generator generates the image 
-         z    : Latent space code
+         image  : Conditioned image on which the generator generates the image 
+         z      : Latent space code
+         layers : The number of layers either in downsampling / upsampling 
+         kernel : Number of kernels to the first layer of the network
+         non_lin: Non linearity to be used
 
       Returns:
          Generated image
       """
-      with tf.name_scope('generator'):
+      self.g_layers = {}
+      with tf.variable_scope('generator'):
          if self.opts.where_add == "input":
-            return self.generator_input(image, z)
+            return self.generator_input(image, z, layers, kernel, non_lin)
          elif self.opts.where_add == "all":
-            return self.generator_all(image, z)
+            return self.generator_all(image, z, layers, kernel, non_lin)
          else:
             raise ValueError("No such type of generator exists!")
 
-   def generator_input(self, image, z):
+   def generator_input(self, image, z, layers=3, kernel=64, non_lin='lrelu'):
       """Generator graph where noise is concatenated to the first layer
 
       Args:
-         image: Conditioned image on which the generator generates the image
-         z    : Latent space noise
+         image : Conditioned image on which the generator generates the image
+         z     : Latent space noise
+         layers: The number of layers either in downsampling / upsampling 
+         kernel: Number of kernels to the first layer of the network
 
       Returns:
          Generated image
       """
+      in_channels = self.opts.c + self.opts.code_len
+      z = z # TODO : Transform z into tensor of shape: [self.opts.h, self.opts.w, self.opts.code_len]
+      in_layer = image + z
+      k, s = 4, 2
+      factor = 1
+      # Downsampling
+      for idx in xrange(layers):
+         factor = min(2**idx, 4)
+         self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, kernel=k, 
+            out_channels=kernel*factor, stride=s, name='conv{}'.format(idx))
+         input_layer = self.g_layers['conv{}'.format(idx)]
+         try:
+            self.g_layers['conv{}'.format(idx)] = self.non_lin[
+               non_lin](input_layer)
+         except KeyError:
+            raise KeyError("No such non-linearity is available!")
+         # Maybe add Pooling layer ?            
+         in_layer = self.g_layers['conv{}'.format(idx)]
 
-      
-   def generator_all(self, image, z):
+      # Upsampling
+      in_layer = self.g_layers['conv{}'.format(layers-1)]
+      new_idx = layers
+      for idx in xrange(layers-2, -1, -1):
+         out_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[1]
+         out_channels = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[-1]
+         self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, kernel=k,
+            out_shape=out_shape, out_channels=out_channels, name='conv{}'.format(new_idx))
+         input_layer = self.g_layers['conv{}'.format(new_idx)]
+         try:
+            self.g_layers['conv{}'.format(new_idx)] = self.non_lin[
+               non_lin](input_layer)
+         except KeyError:
+            raise KeyError("No such non-linearity is available!")
+         input_layer = self.g_layers['conv{}'.format(new_idx)]
+         self.g_layers['conv{}'.format(new_idx)] = input_layer + self.g_layers['conv{}'.format(idx)]
+         input_layer = self.g_layers['conv{}'.format(new_idx)]
+         new_idx += 1
+      return self.g_layers['conv{}'.format(new_idx-1)]
+
+   def generator_all(self, image, z, layers=3, kernel=64, non_lin='lrelu'):
       """Generator graph where noise is to all the layers
 
       Args:
-         image: Conditioned image on which the generator generates the image
-         z    : Latent space noise
+         image : Conditioned image on which the generator generates the image
+         z     : Latent space noise
+         layers: The number of layers either in downsampling / upsampling 
 
       Returns:
          Generated image
@@ -213,7 +261,9 @@ class Model(object):
    def test_graph(self):
       """Generate the graph and check if the connections are correct
       """
-      pass
+      print 'Testing the architecture of the graph of the network...'
+      self.sess.run(self.init)
+      tf.train.write_graph(self.sess.graph, self.opts.summary_dir, 'test.pbtxt')
 
    def test(self, image):
       """Test the model
