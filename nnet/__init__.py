@@ -27,20 +27,20 @@ class Model(object):
       self.should_train = is_training
       self.init = tf.global_variables_initializer()
       # self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
-      self.writer = tf.summary.FileWriter(self.opts.summary_dir, self.sess.graph)
       self.build_graph()
 
    def build_graph(self):
       """Generate various parts of the graph
       """
-      self.non_lin = {'relu' : lambda x: relu(x),
-                      'lrelu': lambda x: lrelu(x),
-                      'tanh' : lambda x: tanh(x)
+      self.non_lin = {'relu' : lambda x: relu(x, name='relu'),
+                      'lrelu': lambda x: lrelu(x, name='lrelu'),
+                      'tanh' : lambda x: tanh(x, name='tanh')
                      }
       self.placeholders()
       self.E  = self.encoder(self.target_images, self.opts.e_layers,
          self.opts.e_kernels, self.opts.e_nonlin)
-      self.G  = self.generator(self.input_images, self.code)
+      self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
+         self.opts.g_kernels, self.opts.g_nonlin)
       # self.D  = self.discriminator(self.input_images, reuse=False)
       # self.D_ = self.discriminator(self.G, reuse=True)
       self.summaries()
@@ -61,7 +61,7 @@ class Model(object):
       gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
       self.summaries = tf.summary.merge_all()
 
-   def encoder(self, image, num_layers=3, kernels=64, non_linearity='relu'):
+   def encoder(self, image, num_layers=3, kernels=64, non_lin='relu'):
       """Encoder which generates the latent code
       
       Args:
@@ -74,27 +74,29 @@ class Model(object):
       with tf.variable_scope('encoder'):
          if self.opts.e_type == "normal":
             return self.normal_encoder(image, num_layers=num_layers, output_neurons=8,
-               kernels=kernels, non_linearity=non_linearity)
+               kernels=kernels, non_lin=non_lin)
          elif self.opts.e_type == "residual":
             return self.resnet_encoder(image, num_layers, output_neurons=8,
-               kernels=kernels, non_linearity=non_linearity)
+               kernels=kernels, non_lin=non_lin)
          else:
             raise ValueError("No such type of encoder exists!")
 
-   def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_linearity='relu'):
+   def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu'):
       """Few convolutional layers followed by downsampling layers
       """
       k, s = 4, 2
-      self.e_layers['conv0'] = conv2d(image, kernel=k, out_channels=kernels*1, stride=s, name='conv0')
+      try:
+         self.e_layers['conv0'] = conv2d(image, kernel=k, out_channels=kernels*1, stride=s, name='conv0',
+            non_lin=self.non_lin[non_lin])
+      except KeyError:
+         raise KeyError("No such non-linearity is available!")
       for idx in range(1, num_layers):
          input_layer = self.e_layers['conv{}'.format(idx-1)]
          factor = min(2**idx, 4)
-         self.e_layers['conv{}'.format(idx)] = conv2d(input_layer, kernel=k,
-            out_channels=kernels*factor, stride=s, name='conv{}'.format(idx)) 
-         input_layer = self.e_layers['conv{}'.format(idx)]
          try:
-            self.e_layers['conv{}'.format(idx)] = self.non_lin[
-               non_linearity](input_layer)
+            self.e_layers['conv{}'.format(idx)] = conv2d(input_layer, kernel=k,
+               out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
+               non_lin=self.non_lin[non_lin]) 
          except KeyError:
             raise KeyError("No such non-linearity is available!")
       self.e_layers['pool'] = average_pool(self.e_layers['conv{}'.format(num_layers-1)],
@@ -107,7 +109,7 @@ class Model(object):
    def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_linearity='relu'):
       """Residual Network with several residual blocks
       """
-      pass
+      raise NotImplementedError("Not Implemented")
 
    def generator(self, image, z, layers=3, kernel=64, non_lin='relu'):
       """Generator graph of GAN
@@ -151,12 +153,10 @@ class Model(object):
       # Downsampling
       for idx in xrange(layers):
          factor = min(2**idx, 4)
-         self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, kernel=k, 
-            out_channels=kernel*factor, stride=s, name='conv{}'.format(idx))
-         input_layer = self.g_layers['conv{}'.format(idx)]
          try:
-            self.g_layers['conv{}'.format(idx)] = self.non_lin[
-               non_lin](input_layer)
+            self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, kernel=k, 
+               out_channels=kernel*factor, stride=s, name='conv{}'.format(idx),
+               non_lin=self.non_lin[non_lin])
          except KeyError:
             raise KeyError("No such non-linearity is available!")
          # Maybe add Pooling layer ?            
@@ -168,19 +168,19 @@ class Model(object):
       for idx in xrange(layers-2, -1, -1):
          out_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[1]
          out_channels = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[-1]
-         self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, kernel=k,
-            out_shape=out_shape, out_channels=out_channels, name='conv{}'.format(new_idx))
-         input_layer = self.g_layers['conv{}'.format(new_idx)]
          try:
-            self.g_layers['conv{}'.format(new_idx)] = self.non_lin[
-               non_lin](input_layer)
+            self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, kernel=k,
+               out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
+               non_lin=self.non_lin[non_lin])
          except KeyError:
             raise KeyError("No such non-linearity is available!")
          input_layer = self.g_layers['conv{}'.format(new_idx)]
-         self.g_layers['conv{}'.format(new_idx)] = input_layer + self.g_layers['conv{}'.format(idx)]
-         input_layer = self.g_layers['conv{}'.format(new_idx)]
+         self.g_layers['conv{}'.format(new_idx)] = add_layers(input_layer, self.g_layers['conv{}'.format(idx)])
+         in_layer = self.g_layers['conv{}'.format(new_idx)]
          new_idx += 1
-      return self.g_layers['conv{}'.format(new_idx-1)]
+      self.g_layers['conv{}'.format(layers*2-1)] = deconv(self.g_layers['conv{}'.format(new_idx-1)],
+         kernel=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx), non_lin=self.non_lin['tanh'])
+      return self.g_layers['conv{}'.format(new_idx)]
 
    def generator_all(self, image, z, layers=3, kernel=64, non_lin='lrelu'):
       """Generator graph where noise is to all the layers
@@ -193,6 +193,7 @@ class Model(object):
       Returns:
          Generated image
       """
+      raise NotImplementedError("Not Implemented")
 
 
    def discriminator(self, image, reuse=False):
@@ -213,9 +214,15 @@ class Model(object):
       with tf.name_scope('discriminator'):
          pass
 
-   def loss(self):
+   def loss(self, z1, z2, p1, p2):
       """Implements the loss graph
       """
+
+      def gan_loss():
+         """Implements the GAN loss
+         """
+         pass
+
       def l1_loss(z1, z2):
          """Implements L1 loss graph
          
@@ -243,7 +250,9 @@ class Model(object):
          pass
 
       with tf.name_scope('loss'):
-         pass
+         l1_loss_ = l1_loss(z1, z2)
+         kl_loss_ = kl_divergence(p1, p2)
+         gan_loss = gan_loss()
 
    def train(self):
       """Train the network
@@ -262,8 +271,8 @@ class Model(object):
       """Generate the graph and check if the connections are correct
       """
       print 'Testing the architecture of the graph of the network...'
-      self.sess.run(self.init)
-      tf.train.write_graph(self.sess.graph, self.opts.summary_dir, 'test.pbtxt')
+      self.writer = tf.summary.FileWriter(self.opts.summary_dir, self.sess.graph)
+
 
    def test(self, image):
       """Test the model

@@ -16,7 +16,7 @@ tf.app.flags.DEFINE_string('dataset_dir', data_dir, """Path to data""")
 tf.app.flags.DEFINE_integer('h', 256, """Height images""")
 tf.app.flags.DEFINE_integer('w', 256, """Width of images""")
 tf.app.flags.DEFINE_integer('c', 1, """Number of input channels of images""")
-tf.app.flags.DEFINE_string('dataset', "mnist", """mnist or CIFAR or imagenet""")
+tf.app.flags.DEFINE_string('dataset', "maps", """edges2handbags/edges2shoes/facades/maps""")
 tf.app.flags.DEFINE_boolean('numpy_rec', False, """Are numpy records of data complete?""")
 
 # Training
@@ -51,7 +51,6 @@ tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noi
 tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator network""")
 tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
 tf.app.flags.DEFINE_string('g_nonlin', 'lrelu', """Type of non-linearity for the generator network {relu or lrelu}""")
-
 
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
