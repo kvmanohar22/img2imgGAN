@@ -27,7 +27,8 @@ def bias_init(shape, name=None, constant=0.0):
 
 
 def conv2d(input, kernel, out_channels, stride=1, name=None, reuse=False, 
-   initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01):   
+   initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01,
+   non_lin=None):   
    """
    2D convolution layer with relu activation
    """
@@ -43,12 +44,14 @@ def conv2d(input, kernel, out_channels, stride=1, name=None, reuse=False,
       strides=[1, stride, stride, 1]
       output = tf.nn.conv2d(input=input, filter=W, strides=strides, padding='SAME')
       output = output + b
-      return output
-
+      if non_lin is None:
+         return output
+      else:
+         return non_lin(output)
 
 def deconv(input, kernel, out_shape, out_channels, stride=1, name=None,
    reuse=False, initializer=tf.contrib.layers.xavier_initializer(),
-   bias_constant=0.0, batch_size=1):
+   bias_constant=0.0, batch_size=1, non_lin=None):
    """
    2D deconvolution layer with relu activation
    """
@@ -65,8 +68,10 @@ def deconv(input, kernel, out_shape, out_channels, stride=1, name=None,
       strides=[1, stride, stride, 1]
       output = tf.nn.conv2d_transpose(value=input, filter=W, output_shape=output_shape, strides=strides)
       output = output + b
-      return output
-
+      if non_lin is None:
+         return output
+      else:
+         return non_lin(output)
 
 def max_pool(input, kernel=3, stride=2, name=None):
    """
@@ -140,12 +145,12 @@ def tanh(input_layer, name=None):
    with tf.variable_scope(name):
       return tf.nn.tanh(input_layer)
 
-def leaky_relu(input, alpha=0.2, name=None):
+def lrelu(input, alpha=0.2, name=None):
    """
    Leaky ReLU
    """
    if name is None:
-      name = "leaky_relu"
+      name = "lrelu"
 
    with tf.variable_scope(name):
       return tf.maximum(input, alpha * input)
@@ -242,6 +247,18 @@ def residual_block(input_layer, output_channels, is_training, stride=1, first_bl
          output = input_layer + conv2
       return output
    
+def add_layers(layer_1, layer_2):
+   """Adds two layers
+
+   Args:
+      layer_1: The first layer
+      layer_2: The second layer
+
+   Returns:
+      Layer after addition of the given two
+   """
+   with tf.name_scope('addition'):
+      return tf.add(layer_1, layer_2)
 
 def activation_summary(tensor):
    """

@@ -2,11 +2,13 @@ import io
 import os
 import sys
 import time
+import pprint
 import argparse
 from time import gmtime, strftime
 import tensorflow as tf
 
 from utils import *
+from logger import log_config
 from config import FLAGS
 import nnet
 import utils
@@ -20,6 +22,9 @@ def main(_):
    create_rundirs(FLAGS, idx)
    dump_model_params(FLAGS)
 
+   pp = pprint.PrettyPrinter()
+   pp.pprint(FLAGS.__flags)
+   log_config(idx, FLAGS.__flags)
    if FLAGS.archi:
       net = nnet.Model(FLAGS, False)
       net.test_graph()
