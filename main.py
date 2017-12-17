@@ -22,15 +22,25 @@ def main(_):
    create_rundirs(FLAGS, idx)
    dump_model_params(FLAGS)
 
-   pp = pprint.PrettyPrinter()
-   pp.pprint(FLAGS.__flags)
    log_config(idx, FLAGS.__flags)
+
    if FLAGS.archi:
       net = nnet.Model(FLAGS, False)
       net.test_graph()
       exit()
 
+   if FLAGS.create != "":
+      dataset = utils.Dataset(FLAGS)
+      dataset.load_data(FLAGS.create)
+      exit()
+
+   FLAGS.h = 600 if FLAGS.dataset == 'maps' else 256
+   FLAGS.w = FLAGS.h
+
    if FLAGS.train:
+      print 'Summary of the model:'
+      pp = pprint.PrettyPrinter()
+      pp.pprint(FLAGS.__flags)
       net = nnet.Model(FLAGS, FLAGS.train)
       print 'Training the network...'
       net.train()

@@ -11,13 +11,13 @@ summary_dir = os.path.join(cwd,'logs', "summary")
 tf.app.flags.DEFINE_boolean('archi', False, """Test the architecture of the network?""")
 
 # Data
-tf.app.flags.DEFINE_string('root_dir', cwd, """Base Path""")
+tf.app.flags.DEFINE_string('root_dir', cwd, """Base Path (Default is the present working directory)""")
 tf.app.flags.DEFINE_string('dataset_dir', data_dir, """Path to data""")
-tf.app.flags.DEFINE_integer('h', 256, """Height images""")
+tf.app.flags.DEFINE_integer('h', 256, """Height of images""")
 tf.app.flags.DEFINE_integer('w', 256, """Width of images""")
 tf.app.flags.DEFINE_integer('c', 1, """Number of input channels of images""")
 tf.app.flags.DEFINE_string('dataset', "maps", """edges2handbags/edges2shoes/facades/maps""")
-tf.app.flags.DEFINE_boolean('numpy_rec', False, """Are numpy records of data complete?""")
+tf.app.flags.DEFINE_string('create', "", """Create numpy records of the given dataset""")
 
 # Training
 tf.app.flags.DEFINE_integer('batch_size', 1, """Batch size""")

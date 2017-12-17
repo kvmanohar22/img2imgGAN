@@ -196,8 +196,10 @@ class Model(object):
       raise NotImplementedError("Not Implemented")
 
 
-   def discriminator(self, image, reuse=False):
+   def discriminator(self, conditioning_image, image, reuse=False):
       """Discriminator graph of GAN
+      The discriminator is a PatchGAN discriminator which consists of two 
+         discriminators for two different scales i.e, 70x70 and 140x140
       Authors claim not conditioning the discriminator yields better results
          and hence not conditioning the discriminator with the input image
       Authors also claim that using two discriminators for cVAE-GAN and cLR-GAN
@@ -213,6 +215,14 @@ class Model(object):
       """
       with tf.name_scope('discriminator'):
          pass
+
+   def discriminator_70x70(self, conditioning_image, image, resuse=False):
+      """70x70 PatchGAN discriminator
+      """
+
+   def discriminator_140x140(self, conditioning_image, image, resuse=False):
+      """140x140 PatchGAN discriminator
+      """
 
    def loss(self, z1, z2, p1, p2):
       """Implements the loss graph
