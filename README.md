@@ -9,6 +9,7 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 
 ## Hierarchy
 
+```
  -img2imgGAN/
             -nnet
             -utils
@@ -17,6 +18,7 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
                   -edges2shoes
                   -facades
                   -maps
+```
 
 ## Generating the datasets
 
