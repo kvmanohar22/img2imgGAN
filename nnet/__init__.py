@@ -27,7 +27,6 @@ class Model(object):
       self.sess = tf.Session()
       self.should_train = is_training
       self.init = tf.global_variables_initializer()
-      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
       self.build_graph()
 
    def build_graph(self):
@@ -51,7 +50,7 @@ class Model(object):
       """
       self.input_images = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="input_images")
       self.target_images = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="target_images")
-      self.code = tf.placeholder(tf.float32, [None, self.h, self.w, self.opts.code_len], name="code")
+      self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
       self.is_training = tf.placeholder(tf.bool, name="is_training")
 
    def summaries(self):
@@ -146,9 +145,11 @@ class Model(object):
       Returns:
          Generated image
       """
-      in_channels = self.opts.c + self.opts.code_len
-      z = z # TODO : Transform z into tensor of shape: [self.opts.h, self.opts.w, self.opts.code_len]
-      in_layer = image + z
+
+      with tf.name_scope('replication'):
+         tiled_z = tf.tile(self.code, [self.opts.batch_size, self.w*self.h], name='tiling')
+         reshaped = tf.reshape(tiled_z, [-1, self.h, self.w, self.opts.code_len], name='reshape')
+         in_layer = tf.concat([image, reshaped], axis=3, name='concat')
       k, s = 4, 2
       factor = 1
       # Downsampling
@@ -172,7 +173,7 @@ class Model(object):
          try:
             self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, kernel=k,
                out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-               non_lin=self.non_lin[non_lin])
+               non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size)
          except KeyError:
             raise KeyError("No such non-linearity is available!")
          input_layer = self.g_layers['conv{}'.format(new_idx)]
@@ -180,7 +181,8 @@ class Model(object):
          in_layer = self.g_layers['conv{}'.format(new_idx)]
          new_idx += 1
       self.g_layers['conv{}'.format(layers*2-1)] = deconv(self.g_layers['conv{}'.format(new_idx-1)],
-         kernel=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx), non_lin=self.non_lin['tanh'])
+         kernel=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
+         non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size)
       return self.g_layers['conv{}'.format(new_idx)]
 
    def generator_all(self, image, z, layers=3, kernel=64, non_lin='lrelu'):
@@ -297,7 +299,7 @@ class Model(object):
    def train(self):
       """Train the network
       """
-      pass
+      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
 
    def checkpoint(self, iteration):
       """Creates a checkpoint at the given iteration
@@ -310,7 +312,7 @@ class Model(object):
    def test_graph(self):
       """Generate the graph and check if the connections are correct
       """
-      print 'Testing the architecture of the graph of the network...'
+      print 'Test graph is generated...'
       self.writer = tf.summary.FileWriter(self.opts.summary_dir, self.sess.graph)
 
    def test(self, image):
