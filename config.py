@@ -41,7 +41,7 @@ tf.app.flags.DEFINE_float('lambda_kl', 0.01, """Parameter to balance the loss"""
 tf.app.flags.DEFINE_string('sample_dir', sample_dir, """Generate sample images""")
 tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory including checkpoints""")
 
-# Architecture
+# Encoder
 tf.app.flags.DEFINE_string('e_type', 'normal', """Type of the network, {normal or residual}""")
 tf.app.flags.DEFINE_integer('e_layers', 3, """Number of layers in the encoder network""")
 tf.app.flags.DEFINE_integer('e_kernels', 64, """Number of kernels for the first layer of encoder""")
@@ -51,6 +51,9 @@ tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noi
 tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator network""")
 tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
 tf.app.flags.DEFINE_string('g_nonlin', 'lrelu', """Type of non-linearity for the generator network {relu or lrelu}""")
+# Discriminator
+tf.app.flags.DEFINE_integer('d_type', 70, """Type of discriminator to use, 70x70 or 140x140 PatchGAN""")
+
 
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")

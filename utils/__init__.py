@@ -54,20 +54,28 @@ class Dataset(object):
       except KeyError as E:
          raise KeyError('Dataset \"{}\" doesnot exist'.format(dataset))
 
+   def create_records(self, dataset):
+      """Creates numpy records
+
+      Args:
+         dataset: Name of the dataset
+      """
       base_path = os.path.join(self.opts.dataset_dir, dataset)
       train_files = os.listdir(os.path.join(base_path, 'train'))
       test_files = os.listdir(os.path.join(base_path, 'val'))
 
       print 'Creating numpy records for {} train data'.format(dataset)
-      self.train_data = self.create_numpy_records(dataset, train_files, "train")
-      sys.stdout.write('\nSaving the file...\n')
-      sys.stdout.flush()
-      self.save_records(dataset, self.train_data, "train")
-      print '\nCreating numpy records for {} test data'.format(dataset)
-      self.val_data = self.create_numpy_records(dataset, test_files, "val")
-      sys.stdout.write('\nSaving the file...\n')
-      sys.stdout.flush()
-      self.save_records(dataset, self.val_data, "val")
+      train_data, flag = self.create_numpy_records(dataset, train_files, "train")
+      if flag:
+         sys.stdout.write('\nSaving the file...\n')
+         sys.stdout.flush()
+         self.save_records(dataset, train_data, "train")
+      print '\nCreating numpy records for {} validation data'.format(dataset)
+      val_data, flag = self.create_numpy_records(dataset, test_files, "val")
+      if flag:
+         sys.stdout.write('\nSaving the file...\n')
+         sys.stdout.flush()
+         self.save_records(dataset, val_data, "val")
 
    def create_numpy_records(self, dataset, files, dtype):
       """Creates numpy files of the given image paths
@@ -81,14 +89,16 @@ class Dataset(object):
          Numpy records of the given dataset
       """
       if os.path.exists(os.path.join(self.opts.dataset_dir, dataset, '{}.npy'.format(dtype))):
-         return loader(self.opts.dataset_dir, dataset, dtype)
+         print 'Numpy records already exists for "{}" {} dataset'.format(dataset, dtype)
+         return None, False
 
       done_len_size = 30
       split_len = 600 if dataset == 'maps' else 256
       img_dim = split_len
       paths = [os.path.join(self.opts.dataset_dir, dataset,
          dtype, file) for file in files]
-      data = np.empty([len(files), 2, img_dim, img_dim, 3])
+      if dataset == 'edges2handbags':
+         data = np.empty([len(files), 2, img_dim, img_dim, 3], dtype=np.uint8)
       for idx, file in enumerate(paths):
          sys.stdout.write('\r')
          percentage = (idx+1.)/len(files)
@@ -100,7 +110,7 @@ class Dataset(object):
          img = io.imread(file)
          img1, img2 = img[:, :split_len, :], img[:, split_len:, :]
          data[idx, 0, :], data[idx, 1, :] = img1, img2
-      return data
+      return data, True
 
    def save_records(self, dataset, data, dtype):
       """Saves the numpy record files for the given dataset
