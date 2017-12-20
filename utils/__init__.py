@@ -49,8 +49,10 @@ class Dataset(object):
       try:
          if self.records[dataset]:
             print 'Loading {} data records...'.format(dataset)
-            self.train_data = loader(self.opts.dataset_dir, dataset, 'train')
-            self.val_data = loader(self.opts.dataset_dir, dataset, 'val')
+            self.train_data_in = loader(self.opts.dataset_dir, dataset, 'train_in')
+            self.train_data_out = loader(self.opts.dataset_dir, dataset, 'train_out')
+            self.val_data_in = loader(self.opts.dataset_dir, dataset, 'val_in')
+            self.val_data_out = loader(self.opts.dataset_dir, dataset, 'val_out')
       except KeyError as E:
          raise KeyError('Dataset \"{}\" doesnot exist'.format(dataset))
 
@@ -65,17 +67,19 @@ class Dataset(object):
       test_files = os.listdir(os.path.join(base_path, 'val'))
 
       print 'Creating numpy records for {} train data'.format(dataset)
-      train_data, flag = self.create_numpy_records(dataset, train_files, "train")
+      t_data_in, t_data_out, flag = self.create_numpy_records(dataset, train_files, "train")
       if flag:
          sys.stdout.write('\nSaving the file...\n')
          sys.stdout.flush()
-         self.save_records(dataset, train_data, "train")
+         self.save_records(dataset, t_data_in, "train_in")
+         self.save_records(dataset, t_data_out, "train_out")
       print '\nCreating numpy records for {} validation data'.format(dataset)
-      val_data, flag = self.create_numpy_records(dataset, test_files, "val")
+      v_data_in, v_data_out, flag = self.create_numpy_records(dataset, test_files, "val")
       if flag:
          sys.stdout.write('\nSaving the file...\n')
          sys.stdout.flush()
-         self.save_records(dataset, val_data, "val")
+         self.save_records(dataset, v_data_in, "val_in")
+         self.save_records(dataset, v_data_out, "val_out")
 
    def create_numpy_records(self, dataset, files, dtype):
       """Creates numpy files of the given image paths
@@ -97,8 +101,10 @@ class Dataset(object):
       img_dim = split_len
       paths = [os.path.join(self.opts.dataset_dir, dataset,
          dtype, file) for file in files]
-      if dataset == 'edges2handbags':
-         data = np.empty([len(files), 2, img_dim, img_dim, 3], dtype=np.uint8)
+      
+      data_in  = np.empty([len(files), img_dim, img_dim, 3], dtype=np.uint8)
+      data_out = np.empty([len(files), img_dim, img_dim, 3], dtype=np.uint8)
+      
       for idx, file in enumerate(paths):
          sys.stdout.write('\r')
          percentage = (idx+1.)/len(files)
@@ -109,8 +115,8 @@ class Dataset(object):
 
          img = io.imread(file)
          img1, img2 = img[:, :split_len, :], img[:, split_len:, :]
-         data[idx, 0, :], data[idx, 1, :] = img1, img2
-      return data, True
+         data_in[idx], data_out[idx] = img1, img2
+      return data_in, data_out, True
 
    def save_records(self, dataset, data, dtype):
       """Saves the numpy record files for the given dataset

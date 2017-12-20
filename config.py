@@ -52,8 +52,8 @@ tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator 
 tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
 tf.app.flags.DEFINE_string('g_nonlin', 'lrelu', """Type of non-linearity for the generator network {relu or lrelu}""")
 # Discriminator
-tf.app.flags.DEFINE_integer('d_type', 70, """Type of discriminator to use, 70x70 or 140x140 PatchGAN""")
-
+tf.app.flags.DEFINE_string('d_nonlin', 'lrelu', """Type of non-linearity for the discriminator network""")
+tf.app.flags.DEFINE_boolean('d_usemulti', False, """Use multiple discriminators for Discriminator?""")
 
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")

@@ -145,6 +145,16 @@ def tanh(input_layer, name=None):
    with tf.variable_scope(name):
       return tf.nn.tanh(input_layer)
 
+def sigmoid(input_layer, name=None):
+   """
+   Tanh activation
+   """
+   if name is None:
+      name = "sigmoid"
+
+   with tf.variable_scope(name):
+      return tf.nn.sigmoid(input_layer)
+
 def lrelu(input, alpha=0.2, name=None):
    """
    Leaky ReLU
