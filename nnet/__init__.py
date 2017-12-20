@@ -27,7 +27,7 @@ class Model(object):
       self.sess = tf.Session()
       self.should_train = is_training
       self.init = tf.global_variables_initializer()
-      # self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
+      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
       self.build_graph()
 
    def build_graph(self):
@@ -42,8 +42,8 @@ class Model(object):
          self.opts.e_kernels, self.opts.e_nonlin)
       self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
          self.opts.g_kernels, self.opts.g_nonlin)
-      # self.D  = self.discriminator(self.input_images, reuse=False)
-      # self.D_ = self.discriminator(self.G, reuse=True)
+      self.D  = self.discriminator(self.input_images, reuse=False)
+      self.D_ = self.discriminator(self.G, reuse=True)
       self.summaries()
 
    def placeholders(self):
@@ -197,7 +197,8 @@ class Model(object):
       raise NotImplementedError("Not Implemented")
 
 
-   def discriminator(self, conditioning_image, image, reuse=False):
+   def discriminator(self, image, kernels=64, num_layers=3, norm_layer=None, non_lin='lrelu', 
+                     use_sigmoid=False, reuse=False):
       """Discriminator graph of GAN
       The discriminator is a PatchGAN discriminator which consists of two 
          discriminators for two different scales i.e, 70x70 and 140x140
@@ -207,29 +208,51 @@ class Model(object):
          yields better results, here we share the weights for both of them
 
       Args:
-         image: Input image to the discriminator
-         reuse: Flag to check whether to reuse the variables created for the
-            discriminator graph
+         image      : Input image to the discriminator
+         kernels    : Number of kernels for the first layer of the network
+         num_layers : Total number of layers
+         norm_layer : Type of normalization layer {batch/instance}
+         non_lin    : Type of non-linearity of the network
+         use_sigmoid: Use Sigmoid layer before the final layer?
+         reuse      : Flag to check whether to reuse the variables created for the
+                     discriminator graph
 
       Returns:
          Whether or not the input image is real or fake
       """
       self.d_layers = {}
-      with tf.name_scope('discriminator'):
-         if self.opts.d_type == 70:
-            return self.discriminator_70x70(self, conditioning_image, image, reuse)
-         elif self.opts.d_type == 140:
-            return self.discriminator_140x140(self, conditioning_image, image, reuse)
+      with tf.variable_scope('discriminator'):
+         if not self.opts.d_usemulti:
+            return self.discriminator_patch(image, kernels, num_layers, norm_layer, non_lin, 
+               use_sigmoid, reuse)
          else:
-            raise ValueError("No such type of PatchGAN discriminator exists")
+            raise NotImplementedError("Multiple discriminators is not implemented")
 
-   def discriminator_70x70(self, conditioning_image, image, resuse=False):
-      """70x70 PatchGAN discriminator
+   def discriminator_patch(self, image, kernels, num_layers, norm_layer, non_lin,
+                           use_sigmoid=False, reuse=False):
+      """PatchGAN discriminator
       """
+      # TODO: Add norm layer
+      k, s = 4, 2
+      self.d_layers['conv0'] = conv2d(image, kernel=k, out_channels=kernels*1, stride=s, name='conv0',
+            non_lin=self.non_lin[non_lin], reuse=reuse)
+      for idx in range(1, num_layers):
+         input_layer = self.d_layers['conv{}'.format(idx-1)]
+         factor = min(2**idx, 8)
+         self.d_layers['conv{}'.format(idx)] = conv2d(input_layer, kernel=k,
+            out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
+            non_lin=self.non_lin[non_lin], reuse=reuse)
+      input_layer = self.d_layers['conv{}'.format(num_layers-1)]
+      factor = min(2**num_layers, 8)
+      self.d_layers['conv{}'.format(num_layers)] = conv2d(input_layer, kernel=k, out_channels=
+         kernels*factor, stride=s, name='conv{}'.format(num_layers), reuse=reuse)
+      # TODO: Add a normalization layer and then non_lin?
+      input_layer = self.d_layers['conv{}'.format(num_layers)]
+      self.d_layers['conv{}'.format(num_layers+1)] = conv2d(input_layer, kernel=k, out_channels=1, 
+         stride=s, name='conv{}'.format(num_layers+1), reuse=reuse)
 
-   def discriminator_140x140(self, conditioning_image, image, resuse=False):
-      """140x140 PatchGAN discriminator
-      """
+      if use_sigmoid:
+         return sigmoid(self.d_layers['conv{}'.format(num_layers+1)])
 
    def loss(self, z1, z2, p1, p2):
       """Implements the loss graph
@@ -289,7 +312,6 @@ class Model(object):
       """
       print 'Testing the architecture of the graph of the network...'
       self.writer = tf.summary.FileWriter(self.opts.summary_dir, self.sess.graph)
-
 
    def test(self, image):
       """Test the model
