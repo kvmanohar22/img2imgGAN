@@ -3,6 +3,7 @@ import numpy as np
 import time
 import os
 import sys
+
 import re
 from datetime import datetime
 
@@ -213,8 +214,14 @@ class Model(object):
       Returns:
          Whether or not the input image is real or fake
       """
+      self.d_layers = {}
       with tf.name_scope('discriminator'):
-         pass
+         if self.opts.d_type == 70:
+            return self.discriminator_70x70(self, conditioning_image, image, reuse)
+         elif self.opts.d_type == 140:
+            return self.discriminator_140x140(self, conditioning_image, image, reuse)
+         else:
+            raise ValueError("No such type of PatchGAN discriminator exists")
 
    def discriminator_70x70(self, conditioning_image, image, resuse=False):
       """70x70 PatchGAN discriminator

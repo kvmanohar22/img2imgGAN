@@ -31,7 +31,7 @@ def main(_):
 
    if FLAGS.create != "":
       dataset = utils.Dataset(FLAGS)
-      dataset.load_data(FLAGS.create)
+      dataset.create_records(FLAGS.create)
       exit()
 
    FLAGS.h = 600 if FLAGS.dataset == 'maps' else 256
