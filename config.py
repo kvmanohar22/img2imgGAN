@@ -15,12 +15,12 @@ tf.app.flags.DEFINE_string('root_dir', cwd, """Base Path (Default is the present
 tf.app.flags.DEFINE_string('dataset_dir', data_dir, """Path to data""")
 tf.app.flags.DEFINE_integer('h', 256, """Height of images""")
 tf.app.flags.DEFINE_integer('w', 256, """Width of images""")
-tf.app.flags.DEFINE_integer('c', 1, """Number of input channels of images""")
+tf.app.flags.DEFINE_integer('c', 3, """Number of input channels of images""")
 tf.app.flags.DEFINE_string('dataset', "maps", """edges2handbags/edges2shoes/facades/maps""")
 tf.app.flags.DEFINE_string('create', "", """Create numpy records of the given dataset""")
 
 # Training
-tf.app.flags.DEFINE_integer('batch_size', 1, """Batch size""")
+tf.app.flags.DEFINE_integer('batch_size', 5, """Batch size""")
 tf.app.flags.DEFINE_integer('MAX_iterations', 1000, """Max iterations for training""")
 tf.app.flags.DEFINE_integer('ckpt_frq', 100, """Frequency at which to checkpoint the model""")
 tf.app.flags.DEFINE_integer('train_size', 10000, """The total training size""")
@@ -50,10 +50,11 @@ tf.app.flags.DEFINE_string('e_nonlin', 'relu', """Type of non-linearity for the 
 tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noise the generator network {input or all}""")
 tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator network""")
 tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
-tf.app.flags.DEFINE_string('g_nonlin', 'lrelu', """Type of non-linearity for the generator network {relu or lrelu}""")
+tf.app.flags.DEFINE_string('g_nonlin', 'tanh', """Type of non-linearity for the generator network {relu or lrelu}""")
 # Discriminator
 tf.app.flags.DEFINE_string('d_nonlin', 'lrelu', """Type of non-linearity for the discriminator network""")
 tf.app.flags.DEFINE_boolean('d_usemulti', False, """Use multiple discriminators for Discriminator?""")
+tf.app.flags.DEFINE_integer('d_kernels', 64, """Number of kernels for the first layer of discriminator""")
 
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
