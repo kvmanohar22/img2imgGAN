@@ -13,7 +13,7 @@ from utils import Dataset
 class Model(object):
 
    def __init__(self, opts, is_training):
-      """Initialize the model
+      """Initialize the model by creating various parts of the graph
 
       Args:
          opts: All the hyper-parameters of the network
@@ -44,20 +44,31 @@ class Model(object):
       self.D  = self.discriminator(self.input_images, reuse=False)
       self.D_ = self.discriminator(self.G, reuse=True)
       self.summaries()
+      self.d_vars = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
+      self.g_vars = [var for var in tf.trainable_variables() if 'generator' in var.name]
+      self.model_loss()
 
    def placeholders(self):
       """Allocate placeholders of the graph
       """
-      self.input_images = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="input_images")
-      self.target_images = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="target_images")
+      self.images_A = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_A")
+      self.images_B = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_B")
       self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
       self.is_training = tf.placeholder(tf.bool, name="is_training")
+      if self.opts.direction == 'a2b':
+         self.input_images  = self.images_A
+         self.target_images = self.images_B
+      elif self.opts.direction == 'b2a':
+         self.input_images  = self.images_B
+         self.target_images = self.images_A
+      else:
+         raise ValueError("There is no such image transition type")
 
    def summaries(self):
       """Adds all the necessary summaries
       """
-      in_images = tf.summary.image('Input_images', self.input_images, max_outputs=10)
-      tr_images = tf.summary.image('Target_images', self.target_images, max_outputs=10)
+      images_A = tf.summary.image('images_A', self.images_A, max_outputs=10)
+      images_B = tf.summary.image('images_B', self.images_B, max_outputs=10)
       gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
       self.summaries = tf.summary.merge_all()
 
@@ -256,12 +267,32 @@ class Model(object):
       if use_sigmoid:
          return sigmoid(self.d_layers['conv{}'.format(num_layers+1)])
 
-   def loss(self, z1, z2, p1, p2):
+   def model_loss(self):
       """Implements the loss graph
       """
 
-      def gan_loss():
+      def cVAE_GAN_loss():
+         """Computes CVAE-GAN loss
+         """
+         self.loss['l1']  = l1_loss(self.target_images, self.G)
+         self.loss['gan'] = gan_loss(self.D, self.D_)
+         self.loss['kl']  = kl_divergence(self.E)
+
+      def cLR_GAN_loss():
+         """Computes CLR-GAN loss
+         """
+         self.loss['l1']  = l1_loss(self.E, self.code)
+         self.loss['gan'] = gan_loss(self.D, self.D_)
+
+      def gan_loss(true_logit, fake_logit):
          """Implements the GAN loss
+
+         Args:
+            true_logit: Output of discriminator for true image
+            fake_logit: Output of discriminator for fake image
+
+         Returns:
+
          """
          pass
 
@@ -279,22 +310,29 @@ class Model(object):
          """
          pass
 
-      def kl_divergence(p1, p2):
+      def kl_divergence(p1, p2=None):
          """Apply KL divergence
          
          Args:
             p1: 1st probability distribution
-            p2: 2nd probability distribution
+            p2: 2nd probability distribution (Usually unit Gaussian distribution)
 
          Returns:
             KL Divergence between the given distributions
          """
          pass
 
-      with tf.name_scope('loss'):
-         l1_loss_ = l1_loss(z1, z2)
-         kl_loss_ = kl_divergence(p1, p2)
-         gan_loss = gan_loss()
+      # TODO: Add other loss specific terms
+      self.loss = {'l1': 0., 'kl': 0., 'gan': 0.}
+      if self.opts.model == 'cvae-gan':
+         cVAE_GAN_loss()
+      elif self.opts.model == 'clr-gan':
+         cLR_GAN_loss()
+      elif self.opts.model == 'bicycle':
+         cVAE_GAN_loss()
+         cLR_GAN_loss()
+      else:
+         raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
 
    def train(self):
       """Train the network

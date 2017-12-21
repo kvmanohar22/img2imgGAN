@@ -9,6 +9,7 @@ sample_dir = os.path.join(cwd,'logs', "sample")
 summary_dir = os.path.join(cwd,'logs', "summary")
 
 tf.app.flags.DEFINE_boolean('archi', False, """Test the architecture of the network?""")
+tf.app.flags.DEFINE_string('model', 'bicycle', """Model to train/test {bicycle/cvae-gan/clr-gan}""")
 
 # Data
 tf.app.flags.DEFINE_string('root_dir', cwd, """Base Path (Default is the present working directory)""")
@@ -20,6 +21,7 @@ tf.app.flags.DEFINE_string('dataset', "maps", """edges2handbags/edges2shoes/faca
 tf.app.flags.DEFINE_string('create', "", """Create numpy records of the given dataset""")
 
 # Training
+tf.app.flags.DEFINE_string('direction', "a2b", """a2b or b2a""")
 tf.app.flags.DEFINE_integer('batch_size', 5, """Batch size""")
 tf.app.flags.DEFINE_integer('MAX_iterations', 1000, """Max iterations for training""")
 tf.app.flags.DEFINE_integer('ckpt_frq', 100, """Frequency at which to checkpoint the model""")
