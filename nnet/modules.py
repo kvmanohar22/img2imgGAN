@@ -2,35 +2,50 @@ import numpy as np
 import tensorflow as tf
 
 
-def weight_init(shape, name=None, initializer=tf.contrib.layers.xavier_initializer()):
-   """
-   Weights Initialization
+def weight_init(shape, name=None,
+                initializer=tf.contrib.layers.xavier_initializer()):
+   """Weights Initialization
+
+   Args:
+      shape      : Shape of the variable
+      name       : Name of the variable
+      initializer: Type of weight initializer
+
+   Returns:
+      Initialized weight tensor
    """
    if name is None:
       name='W'
-   
+
    W = tf.get_variable(name=name, shape=shape,
       initializer=initializer)
    return W 
 
 
 def bias_init(shape, name=None, constant=0.0):
-   """
-   Bias Initialization
+   """Bias Initialization
+
+   Args:
+      shape   : Shape of the variable
+      name    : Name of the variable
+      constant: Value of constant to initialize
+
+   Returns:
+      Initialized bias tensor
    """
    if name is None:
       name='b'
 
    b = tf.get_variable(name=name, shape=shape,
-      initializer=tf.constant_initializer(0.0))
+      initializer=tf.constant_initializer(constant))
    return b
 
 
-def conv2d(input, kernel, out_channels, stride=1, name=None, reuse=False, 
-   initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01,
-   non_lin=None):   
-   """
-   2D convolution layer with relu activation
+def conv2d(input, kernel, out_channels, stride=1, name=None,
+           reuse=False, 
+           initializer=tf.contrib.layers.xavier_initializer(),
+           bias_constant=0.01, non_lin=None):   
+   """2D convolution layer with relu activation
    """
    if name is None:
       name='2d_convolution'
@@ -50,10 +65,9 @@ def conv2d(input, kernel, out_channels, stride=1, name=None, reuse=False,
          return non_lin(output)
 
 def deconv(input, kernel, out_shape, out_channels, stride=1, name=None,
-   reuse=False, initializer=tf.contrib.layers.xavier_initializer(),
-   bias_constant=0.0, batch_size=1, non_lin=None):
-   """
-   2D deconvolution layer with relu activation
+           reuse=False, initializer=tf.contrib.layers.xavier_initializer(),
+           bias_constant=0.0, batch_size=1, non_lin=None):
+   """2D deconvolution layer with relu activation
    """
    if name is None:
       name='de_convolution'
@@ -66,7 +80,8 @@ def deconv(input, kernel, out_shape, out_channels, stride=1, name=None,
       b = bias_init(kernel[2], 'b', bias_constant)
 
       strides=[1, stride, stride, 1]
-      output = tf.nn.conv2d_transpose(value=input, filter=W, output_shape=output_shape, strides=strides)
+      output = tf.nn.conv2d_transpose(value=input, filter=W,
+         output_shape=output_shape, strides=strides)
       output = output + b
       if non_lin is None:
          return output
@@ -74,8 +89,7 @@ def deconv(input, kernel, out_shape, out_channels, stride=1, name=None,
          return non_lin(output)
 
 def max_pool(input, kernel=3, stride=2, name=None):
-   """
-   Max-pool
+   """Max-pool
    """
    if name is None: 
       name='max_pool'
@@ -83,7 +97,8 @@ def max_pool(input, kernel=3, stride=2, name=None):
    with tf.variable_scope(name):
       ksize = [1, kernel, kernel, 1]
       strides = [1, stride, stride, 1]
-      output = tf.nn.max_pool(input, ksize=ksize, strides=strides, padding='SAME')
+      output = tf.nn.max_pool(input, ksize=ksize, strides=strides,
+         padding='SAME')
       return output
 
 def average_pool(input, ksize=3, strides=3, padding='VALID', name=None):
@@ -95,11 +110,13 @@ def average_pool(input, ksize=3, strides=3, padding='VALID', name=None):
    with tf.variable_scope(name):
       ksize = [1, ksize, ksize, 1]
       strides = [1, strides, strides, 1]
-      output = tf.nn.avg_pool(input, ksize=ksize, strides=strides, padding=padding)
+      output = tf.nn.avg_pool(input, ksize=ksize, strides=strides,
+         padding=padding)
       return output
 
 def fully_connected(input, output_neurons, name=None, reuse=False,
-   bias_constant=0.01, initializer=tf.contrib.layers.xavier_initializer()):
+                    bias_constant=0.01,
+                    initializer=tf.contrib.layers.xavier_initializer()):
    """Fully-connected linear activations
    """
    if name is None:
@@ -126,8 +143,7 @@ def dropout_layer(input, keep_prob=0.5, name=None):
       return output
 
 def relu(input_layer, name=None):
-   """
-   ReLU activation
+   """ReLU activation
    """
    if name is None:
       name = "relu"
@@ -136,8 +152,7 @@ def relu(input_layer, name=None):
       return tf.nn.relu(input_layer)
 
 def tanh(input_layer, name=None):
-   """
-   Tanh activation
+   """Tanh activation
    """
    if name is None:
       name = "tanh"
@@ -146,8 +161,7 @@ def tanh(input_layer, name=None):
       return tf.nn.tanh(input_layer)
 
 def sigmoid(input_layer, name=None):
-   """
-   Tanh activation
+   """Tanh activation
    """
    if name is None:
       name = "sigmoid"
@@ -156,8 +170,7 @@ def sigmoid(input_layer, name=None):
       return tf.nn.sigmoid(input_layer)
 
 def lrelu(input, alpha=0.2, name=None):
-   """
-   Leaky ReLU
+   """Leaky ReLU
    """
    if name is None:
       name = "lrelu"
@@ -166,8 +179,7 @@ def lrelu(input, alpha=0.2, name=None):
       return tf.maximum(input, alpha * input)
 
 def batch_normalize(input_layer, is_training, reuse=False, name=None):
-   """
-   Applies batch normalization
+   """Applies batch normalization
    """
    if name is None:
       name = "BatchNorm"
@@ -181,10 +193,11 @@ def batch_normalize(input_layer, is_training, reuse=False, name=None):
       return output
 
 
-def conv_bn_relu(input_layer, kernel, out_channels, is_training, stride=1, name=None,
-   reuse=False, initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01):
-   """
-   Applies series of operations of `conv`->`batch_norm`->`relu`
+def conv_bn_relu(input_layer, kernel, out_channels, is_training, stride=1,
+                 name=None, reuse=False,
+                 initializer=tf.contrib.layers.xavier_initializer(),
+                 bias_constant=0.01):
+   """Applies series of operations of `conv`->`batch_norm`->`relu`
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
       conv_ac = conv2d(input_layer, kernel, out_channels, stride, name, reuse)
@@ -193,10 +206,11 @@ def conv_bn_relu(input_layer, kernel, out_channels, is_training, stride=1, name=
       return conv_rl
 
 
-def conv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1, name=None,
-   reuse=False, initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01):
-   """
-   Applies series of operations of `conv`->`batch_norm`->`leaky_relu`
+def conv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1,
+                  name=None, reuse=False,
+                  initializer=tf.contrib.layers.xavier_initializer(),
+                  bias_constant=0.01):
+   """Applies series of operations of `conv`->`batch_norm`->`leaky_relu`
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
       conv_ac = conv2d(input_layer, kernel, out_channels, stride, name, reuse)
@@ -205,22 +219,25 @@ def conv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1, name
       return conv_rl
 
 
-def dconv_bn_relu(input_layer, kernel, out_channels, out_shape, is_training, stride=1, name=None,
-   reuse=False, initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01, batch_size=1):
-   """
-   Applies series of operations of `conv`->`batch_norm`->`relu`
+def dconv_bn_relu(input_layer, kernel, out_channels, out_shape, is_training,
+                  stride=1, name=None, reuse=False,
+                  initializer=tf.contrib.layers.xavier_initializer(),
+                  bias_constant=0.01, batch_size=1):
+   """Applies series of operations of `conv`->`batch_norm`->`relu`
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
-      conv_ac = deconv(input_layer, kernel, out_shape, out_channels, stride, name, reuse, batch_size=batch_size)
+      conv_ac = deconv(input_layer, kernel, out_shape, out_channels, stride,
+         name, reuse, batch_size=batch_size)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
       conv_rl = relu(conv_bn)
       return conv_rl
 
 
-def dconv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1, name=None,
-   reuse=False, initializer=tf.contrib.layers.xavier_initializer(), bias_constant=0.01, batch_size=1):
-   """
-   Applies series of operations of `conv`->`batch_norm`->`leaky_relu`
+def dconv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1,
+                   name=None, reuse=False, 
+                   initializer=tf.contrib.layers.xavier_initializer(),
+                   bias_constant=0.01, batch_size=1):
+   """Applies series of operations of `conv`->`batch_norm`->`leaky_relu`
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
       conv_ac = deconv(input_layer, kernel, out_channels, stride, name, reuse)
@@ -229,12 +246,10 @@ def dconv_bn_lrelu(input_layer, kernel, out_channels, is_training, stride=1, nam
       return conv_rl
 
 
-def residual_block(input_layer, output_channels, is_training, stride=1, first_block=False, name=None, reuse=False):
-   """Builds a residual block
-   Series of operations include : 
-      -> bactch_norm
-      -> relu
-      -> conv
+def residual_block(input_layer, output_channels, is_training, stride=1,
+                   first_block=False, name=None, reuse=False):
+   """Builds a residual block by applying the following operations:
+      bactch_norm -> relu -> conv
    """
    if name is None:
       name = "residual_block"
@@ -245,12 +260,14 @@ def residual_block(input_layer, output_channels, is_training, stride=1, first_bl
       with tf.variable_scope("block_1"):
          conv1_bn = batch_normalize(input_layer, is_training, reuse=reuse)
          conv1_ac = relu(conv1_bn)
-         conv1 = conv2d(conv1_ac, kernel=3, stride=stride, name="conv1", reuse=reuse)
+         conv1 = conv2d(conv1_ac, kernel=3, stride=stride, name="conv1",
+                        reuse=reuse)
       # Second conv block
       with tf.variable_scope("block_2"):
          conv2_bn = batch_normalize(conv1, is_training, reuse=reuse)
          conv2_ac = relu(conv2_bn)
-         conv2 = conv2d(conv2_ac, kernel=3, stride=stride, name="conv2", reuse=reuse)
+         conv2 = conv2d(conv2_ac, kernel=3, stride=stride, name="conv2",
+                        reuse=reuse)
       if conv2.get_shape().as_list()[-1] != input_layer.get_shape().as_list()[-1]:
          raise ValueError('Output and input channels do not match')
       else:
@@ -271,8 +288,10 @@ def add_layers(layer_1, layer_2):
       return tf.add(layer_1, layer_2)
 
 def activation_summary(tensor):
-   """
-   Write the summary of a tensor
+   """Write the summary of a tensor
+   
+   Args:
+      tensor: Creates summary for this tensor
    """
    tensor_name = tensor.op.name
    tf.summary.histogram(tensor_name+'/activation', tensor)
