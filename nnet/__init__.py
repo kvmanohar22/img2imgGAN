@@ -97,7 +97,7 @@ class Model(object):
       """
       k, s = 4, 2
       try:
-         self.e_layers['conv0'] = conv2d(image, kernel=k, out_channels=kernels*1, stride=s, name='conv0',
+         self.e_layers['conv0'] = conv2d(image, ksize=k, out_channels=kernels*1, stride=s, name='conv0',
             non_lin=self.non_lin[non_lin])
       except KeyError:
          raise KeyError("No such non-linearity is available!")
@@ -105,7 +105,7 @@ class Model(object):
          input_layer = self.e_layers['conv{}'.format(idx-1)]
          factor = min(2**idx, 4)
          try:
-            self.e_layers['conv{}'.format(idx)] = conv2d(input_layer, kernel=k,
+            self.e_layers['conv{}'.format(idx)] = conv2d(input_layer, ksize=k,
                out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
                non_lin=self.non_lin[non_lin]) 
          except KeyError:
@@ -122,14 +122,14 @@ class Model(object):
       """
       raise NotImplementedError("Not Implemented")
 
-   def generator(self, image, z, layers=3, kernel=64, non_lin='relu'):
+   def generator(self, image, z, layers=3, kernels=64, non_lin='relu'):
       """Generator graph of GAN
 
       Args:
          image  : Conditioned image on which the generator generates the image 
          z      : Latent space code
          layers : The number of layers either in downsampling / upsampling 
-         kernel : Number of kernels to the first layer of the network
+         kernels : Number of kernels to the first layer of the network
          non_lin: Non linearity to be used
 
       Returns:
@@ -138,20 +138,20 @@ class Model(object):
       self.g_layers = {}
       with tf.variable_scope('generator'):
          if self.opts.where_add == "input":
-            return self.generator_input(image, z, layers, kernel, non_lin)
+            return self.generator_input(image, z, layers, kernels, non_lin)
          elif self.opts.where_add == "all":
-            return self.generator_all(image, z, layers, kernel, non_lin)
+            return self.generator_all(image, z, layers, kernels, non_lin)
          else:
             raise ValueError("No such type of generator exists!")
 
-   def generator_input(self, image, z, layers=3, kernel=64, non_lin='lrelu'):
+   def generator_input(self, image, z, layers=3, kernels=64, non_lin='lrelu'):
       """Generator graph where noise is concatenated to the first layer
 
       Args:
-         image : Conditioned image on which the generator generates the image
-         z     : Latent space noise
-         layers: The number of layers either in downsampling / upsampling 
-         kernel: Number of kernels to the first layer of the network
+         image  : Conditioned image on which the generator generates the image
+         z      : Latent space noise
+         layers : The number of layers either in downsampling / upsampling 
+         kernels: Number of kernels to the first layer of the network
 
       Returns:
          Generated image
@@ -167,8 +167,8 @@ class Model(object):
       for idx in xrange(layers):
          factor = min(2**idx, 4)
          try:
-            self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, kernel=k, 
-               out_channels=kernel*factor, stride=s, name='conv{}'.format(idx),
+            self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, ksize=k, 
+               out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
                non_lin=self.non_lin[non_lin])
          except KeyError:
             raise KeyError("No such non-linearity is available!")
@@ -182,21 +182,22 @@ class Model(object):
          out_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[1]
          out_channels = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[-1]
          try:
-            self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, kernel=k,
+            self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
                out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
                non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size)
          except KeyError:
             raise KeyError("No such non-linearity is available!")
          input_layer = self.g_layers['conv{}'.format(new_idx)]
-         self.g_layers['conv{}'.format(new_idx)] = add_layers(input_layer, self.g_layers['conv{}'.format(idx)])
+         self.g_layers['conv{}'.format(new_idx)] = add_layers(input_layer,
+            self.g_layers['conv{}'.format(idx)])
          in_layer = self.g_layers['conv{}'.format(new_idx)]
          new_idx += 1
       self.g_layers['conv{}'.format(layers*2-1)] = deconv(self.g_layers['conv{}'.format(new_idx-1)],
-         kernel=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
+         ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
          non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size)
       return self.g_layers['conv{}'.format(new_idx)]
 
-   def generator_all(self, image, z, layers=3, kernel=64, non_lin='lrelu'):
+   def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu'):
       """Generator graph where noise is to all the layers
 
       Args:
@@ -247,21 +248,21 @@ class Model(object):
       """
       # TODO: Add norm layer
       k, s = 4, 2
-      self.d_layers['conv0'] = conv2d(image, kernel=k, out_channels=kernels*1, stride=s, name='conv0',
+      self.d_layers['conv0'] = conv2d(image, ksize=k, out_channels=kernels*1, stride=s, name='conv0',
             non_lin=self.non_lin[non_lin], reuse=reuse)
       for idx in range(1, num_layers):
          input_layer = self.d_layers['conv{}'.format(idx-1)]
          factor = min(2**idx, 8)
-         self.d_layers['conv{}'.format(idx)] = conv2d(input_layer, kernel=k,
+         self.d_layers['conv{}'.format(idx)] = conv2d(input_layer, ksize=k,
             out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
             non_lin=self.non_lin[non_lin], reuse=reuse)
       input_layer = self.d_layers['conv{}'.format(num_layers-1)]
       factor = min(2**num_layers, 8)
-      self.d_layers['conv{}'.format(num_layers)] = conv2d(input_layer, kernel=k, out_channels=
+      self.d_layers['conv{}'.format(num_layers)] = conv2d(input_layer, ksize=k, out_channels=
          kernels*factor, stride=s, name='conv{}'.format(num_layers), reuse=reuse)
       # TODO: Add a normalization layer and then non_lin?
       input_layer = self.d_layers['conv{}'.format(num_layers)]
-      self.d_layers['conv{}'.format(num_layers+1)] = conv2d(input_layer, kernel=k, out_channels=1, 
+      self.d_layers['conv{}'.format(num_layers+1)] = conv2d(input_layer, ksize=k, out_channels=1, 
          stride=s, name='conv{}'.format(num_layers+1), reuse=reuse)
 
       if use_sigmoid:
