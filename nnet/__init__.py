@@ -339,6 +339,7 @@ class Model(object):
       """Train the network
       """
       self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
+      data = Dataset()
 
    def checkpoint(self, iteration):
       """Creates a checkpoint at the given iteration

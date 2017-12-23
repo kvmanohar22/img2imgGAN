@@ -19,6 +19,7 @@ tf.app.flags.DEFINE_integer('w', 256, """Width of images""")
 tf.app.flags.DEFINE_integer('c', 3, """Number of input channels of images""")
 tf.app.flags.DEFINE_string('dataset', "maps", """edges2handbags/edges2shoes/facades/maps""")
 tf.app.flags.DEFINE_string('create', "", """Create numpy records of the given dataset""")
+tf.app.flags.DEFINE_boolean('load_images', False, """Load images before run time?""")
 
 # Training
 tf.app.flags.DEFINE_string('direction', "a2b", """a2b or b2a""")
