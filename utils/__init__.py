@@ -28,14 +28,30 @@ class Dataset(object):
       self.opts = opts
       self.check_records()
       if load:
-         self.load_data(self.opts.dataset)
+         if opts.load_images:
+            raise NotImplementedError("Cannot load images before runtime")
+         else:
+            # Handle the case for validating and testing
+            file_name = os.path.join(opts.dataset_dir, opts.dataset, 'train.txt')
+            with open(file_name) as f:
+               lines = f.readlines()
+               lines = [line.strip() for line in lines]
+               self.t_image_paths = np.array(lines)
 
-   def load_batch(self):
+   def load_batch(self, start_idx, end_idx):
       """Loads a batch of data
       
+      Args:
+         start_idx: First index in the list
+         end_idx  : End index in the list
+
       Returns:
-         ndarray of images and their corresponding labels
+         ndarray of images
       """
+      if self.opts.load_images:
+         raise NotImplementedError("Cannot load images")
+      else:
+         return self.load_images_from_files(start_idx, end_idx)
 
    def load_data(self, dataset=None):
       """Loads a specific dataset
@@ -55,6 +71,31 @@ class Dataset(object):
             self.val_data_out = loader(self.opts.dataset_dir, dataset, 'val_out')
       except KeyError as E:
          raise KeyError('Dataset \"{}\" doesnot exist'.format(dataset))
+
+   def load_images_from_files(self, start_idx, end_idx):
+      """Loads images by reading images from files
+      
+      Args:
+         start_idx: First index in the list
+         end_idx  : End index in the list
+
+      Returns:
+         Images as pairs
+      """
+      images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.uint8)
+      images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.uint8)
+      for idx, paths in enumerate(self.image_paths[start_idx:end_idx]):
+         path = os.path.join(self.opts.dataset_dir, self.opts.dataset,
+                             paths.split(' ').strip())
+         try:
+            image = io.imread(path)
+         except IOError:
+            raise IOError("Cannot read the image {}" % path)
+
+         split_len = 600 if self.opts.dataset == 'maps' else 256
+         images_A[idx] = image[:, :split_len, :]
+         images_B[idx] = image[:, split_len:, :]
+      return images_A, images_B
 
    def create_records(self, dataset):
       """Creates numpy records
