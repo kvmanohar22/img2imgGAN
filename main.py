@@ -1,10 +1,4 @@
-import io
-import os
-import sys
-import time
 import pprint
-import argparse
-from time import gmtime, strftime
 import tensorflow as tf
 
 from utils import *

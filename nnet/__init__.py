@@ -1,6 +1,7 @@
 import tensorflow as tf 
 import numpy as np
 import time
+import datetime
 import os
 import sys
 
@@ -45,8 +46,10 @@ class Model(object):
       self.D_ = self.discriminator(self.G, reuse=True)
       self.summaries()
       self.d_vars = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-      self.g_vars = [var for var in tf.trainable_variables() if 'generator' in var.name]
+      self.ge_vars = [var for var in tf.trainable_variables() if 'generator' or 'encoder' in var.name]
       self.model_loss()
+      self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['gen_enc'], var_list=g_vars)
+      self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['dis'], var_list=d_vars)
 
    def placeholders(self):
       """Allocate placeholders of the graph
@@ -295,7 +298,11 @@ class Model(object):
          Returns:
 
          """
-         pass
+         self.loss['G_fake_loss']
+         self.loss['G_real_loss']
+         self.loss['G_loss']
+         self.loss['D_loss']
+         self.loss['gan']
 
       def l1_loss(z1, z2):
          """Implements L1 loss graph
@@ -323,8 +330,12 @@ class Model(object):
          """
          pass
 
-      # TODO: Add other loss specific terms
-      self.loss = {'l1': 0., 'kl': 0., 'gan': 0.}
+      self.loss = {'l1': 0., 'kl': 0., 'gan': 0., 
+                   'G_real_loss': .0,
+                   'G_fake_loss': .0,
+                   'G_loss': .0,
+                   'D_loss': .0
+                  }
       if self.opts.model == 'cvae-gan':
          cVAE_GAN_loss()
       elif self.opts.model == 'clr-gan':
@@ -338,16 +349,56 @@ class Model(object):
    def train(self):
       """Train the network
       """
+      self.test_graph()
       self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
       data = Dataset()
+      self.sess.run(self.init)
+      formatter =  "{:s} Epoch: [{:4d}/{:4d}] Batch: [{:2d}/{:2d}]  LR: {:.5f} "
+      formatter += "G_fake_loss: {:.5f} G_real_loss: {:.5f} G_loss: {:.5f} D_loss: {:.5f} "
+      formatter += "E_loss: {:.5f}"
+      for epoch in xrange(self.opts.max_epochs):
+         batch_num = 0
+         for batch_begin, batch_end in zip(xrange(0, data.train_size(),
+            self.opts.batch_size), xrange(self.opts.batch_size, data.train_size(),
+            self.opts.batch_size)):
+            begin_time = datetime.now().strftime("%Y%m%d%H%M%S")
+            itertion = epoch * (data.train_size()/self.opts.batch_size) + batch_num
+            images_A, images_B = data.load_batch(batch_begin, batch_end)
 
-   def checkpoint(self, iteration):
-      """Creates a checkpoint at the given iteration
+            code = np.random.uniform(low=-1.0, high=1.0, 
+                                     size=[self.opts.batch_size,
+                                     self.opts.code_len]).astype(np.float32)
+            feed_dict = {self.image_A: imagesA,
+                         self.images_B: images_B,
+                         self.code: code,
+                         self.is_training: True
+                        }
+
+            # Fake Data
+            _, fake_loss, real_loss, g_loss, d_loss, e_loss = self.sess.run(
+               [self.D_opt, ],
+               feed_dict=feed_dict)
+
+            # Real Data
+            _, fake_loss, real_loss, g_loss, d_loss, e_loss = self.sess.run(
+               [self.GE_opt],
+               feed_dict=feed_dict)
+
+            if np.mod(iteration, self.opts.gen_frq) == 0:
+               # Sample the images by setting is_training=False
+
+            batch_num += 1
+
+         if np.mod(epoch, self.opts.ckpt_frq) == 0:
+            self.checkpoint(epoch)
+
+   def checkpoint(self, epoch):
+      """Creates a checkpoint at the given epoch
 
       Args:
-         iteration: Iteration number of the training process
+         epoch: epoch number of the training process
       """
-      self.saver.save(self.sess, os.path.join(self.opts.summary_dir, "model_{}.ckpt").format(iteration))
+      self.saver.save(self.sess, os.path.join(self.opts.summary_dir, "model_{}.ckpt").format(epoch))
 
    def test_graph(self):
       """Generate the graph and check if the connections are correct
