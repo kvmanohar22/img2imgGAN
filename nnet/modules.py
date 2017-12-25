@@ -231,6 +231,23 @@ def relu(input, name=None):
    with tf.variable_scope(name):
       return tf.nn.relu(input)
 
+def lrelu(input, alpha=0.2, name=None):
+   """Leaky ReLU
+
+   Args:
+      input: Input Tensor
+      alpha: Slope for negative values
+      name : Optional name for the operation
+
+   Returns:
+      Tensor after Learky ReLU operation
+   """
+   if name is None:
+      name = "lrelu"
+
+   with tf.variable_scope(name):
+      return tf.maximum(input, alpha * input)
+
 def tanh(input, name=None):
    """Tanh activation
 
@@ -263,23 +280,6 @@ def sigmoid(input, name=None):
    with tf.variable_scope(name):
       return tf.nn.sigmoid(input)
 
-def lrelu(input, alpha=0.2, name=None):
-   """Leaky ReLU
-
-   Args:
-      input: Input Tensor
-      alpha: Slope for negative values
-      name : Optional name for the operation
-
-   Returns:
-      Tensor after Learky ReLU operation
-   """
-   if name is None:
-      name = "lrelu"
-
-   with tf.variable_scope(name):
-      return tf.maximum(input, alpha * input)
-
 def batch_normalize(input, is_training, reuse=False, name=None):
    """Applies batch normalization
 
@@ -304,7 +304,7 @@ def batch_normalize(input, is_training, reuse=False, name=None):
       return output
 
 
-def conv_bn_relu(input, kernel, out_channels, is_training, stride=1,
+def conv_bn_relu(input, ksize, out_channels, is_training, stride=1,
                  name=None, reuse=False,
                  initializer=tf.contrib.layers.xavier_initializer(),
                  bias_constant=0.01):
@@ -312,7 +312,7 @@ def conv_bn_relu(input, kernel, out_channels, is_training, stride=1,
 
    Args:
       input        : Input Tensor
-      kernel       : filter's width (= filter's height)
+      ksize        : filter's width (= filter's height)
       out_channels : Number of filters
       is_training  : Operation is in train / test time
       stride       : stride of the filter
@@ -325,13 +325,13 @@ def conv_bn_relu(input, kernel, out_channels, is_training, stride=1,
       Tensor after the series of operations
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
-      conv_ac = conv2d(input, kernel, out_channels, stride, name, reuse)
+      conv_ac = conv2d(input, ksize, out_channels, stride, name, reuse)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
       conv_rl = relu(conv_bn)
       return conv_rl
 
 
-def conv_bn_lrelu(input, kernel, out_channels, is_training, stride=1,
+def conv_bn_lrelu(input, ksize, out_channels, is_training, stride=1,
                   name=None, reuse=False,
                   initializer=tf.contrib.layers.xavier_initializer(),
                   bias_constant=0.01):
@@ -339,7 +339,7 @@ def conv_bn_lrelu(input, kernel, out_channels, is_training, stride=1,
 
    Args:
       input        : Input Tensor
-      kernel       : filter's width (= filter's height)
+      ksize        : filter's width (= filter's height)
       out_channels : Number of filters
       is_training  : Operation is in train / test time
       stride       : stride of the filter
@@ -352,9 +352,9 @@ def conv_bn_lrelu(input, kernel, out_channels, is_training, stride=1,
       Tensor after the series of operations
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
-      conv_ac = conv2d(input, kernel, out_channels, stride, name, reuse)
+      conv_ac = conv2d(input, ksize, out_channels, stride, name, reuse)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
-      conv_rl = leaky_relu(conv_bn)
+      conv_rl = lrelu(conv_bn)
       return conv_rl
 
 
@@ -414,7 +414,7 @@ def dconv_bn_lrelu(input, kernel, out_channels, out_shape, is_training,
       conv_ac = deconv(input, kernel, out_shape, out_channels, stride,
                        name, reuse, batch_size=batch_size)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
-      conv_rl = leaky_relu(conv_bn)
+      conv_rl = lrelu(conv_bn)
       return conv_rl
 
 

@@ -26,7 +26,7 @@ class Model(object):
       self.w = opts.w
       self.c = opts.c
       self.sess = tf.Session()
-      self.should_train = is_training
+      self.train_mode = is_training
       self.init = tf.global_variables_initializer()
       self.build_graph()
 
@@ -38,18 +38,22 @@ class Model(object):
                       'tanh' : lambda x: tanh(x, name='tanh')
                      }
       self.placeholders()
-      self.E  = self.encoder(self.target_images, self.opts.e_layers,
-         self.opts.e_kernels, self.opts.e_nonlin)
+      self.E  = self.encoder(self.target_images, self.opts.e_layers, self.opts.e_kernels,
+         self.opts.e_nonlin, norm=self.opts.e_norm, reuse=False)
       self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
-         self.opts.g_kernels, self.opts.g_nonlin)
-      self.D  = self.discriminator(self.input_images, reuse=False)
-      self.D_ = self.discriminator(self.G, reuse=True)
+         self.opts.g_kernels, self.opts.g_nonlin, norm=self.opts.g_norm)
+      self.D  = self.discriminator(self.input_images, self.opts.d_kernels, self.opts.d_layers,
+         non_lin=self.opts.d_nonlin, norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
+         reuse=False)
+      self.D_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers, 
+         non_lin=self.opts.d_nonlin, norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
+         reuse=True)
       self.summaries()
       self.d_vars = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
       self.ge_vars = [var for var in tf.trainable_variables() if 'generator' or 'encoder' in var.name]
-      self.model_loss()
-      self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['gen_enc'], var_list=g_vars)
-      self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['dis'], var_list=d_vars)
+      # self.model_loss()
+      # self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['gen_enc'], var_list=self.ge_vars)
+      # self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['dis'], var_list=self.d_vars)
 
    def placeholders(self):
       """Allocate placeholders of the graph
@@ -75,11 +79,17 @@ class Model(object):
       gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
       self.summaries = tf.summary.merge_all()
 
-   def encoder(self, image, num_layers=3, kernels=64, non_lin='relu'):
+   def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
+               reuse=False):
       """Encoder which generates the latent code
       
       Args:
-         image: Image which is to be encoded
+         image     : Image which is to be encoded
+         num_layers: Non linearity to the intermediate layers of the network
+         kernels   : Number of filters for the first layer of the network
+         non_lin   : Type of non-linearity activation
+         norm      : Should use batch normalization
+         reuse     : Should reuse the variables?
 
       Returns:
          The encoded latent code
@@ -88,14 +98,15 @@ class Model(object):
       with tf.variable_scope('encoder'):
          if self.opts.e_type == "normal":
             return self.normal_encoder(image, num_layers=num_layers, output_neurons=8,
-               kernels=kernels, non_lin=non_lin)
+               kernels=kernels, non_lin=non_lin, norm=norm, reuse=reuse)
          elif self.opts.e_type == "residual":
             return self.resnet_encoder(image, num_layers, output_neurons=8,
                kernels=kernels, non_lin=non_lin)
          else:
             raise ValueError("No such type of encoder exists!")
 
-   def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu'):
+   def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='lrelu',
+                      norm=None, reuse=False):
       """Few convolutional layers followed by downsampling layers
       """
       k, s = 4, 2
@@ -107,12 +118,15 @@ class Model(object):
       for idx in range(1, num_layers):
          input_layer = self.e_layers['conv{}'.format(idx-1)]
          factor = min(2**idx, 4)
-         try:
+         if not norm:
             self.e_layers['conv{}'.format(idx)] = conv2d(input_layer, ksize=k,
                out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
-               non_lin=self.non_lin[non_lin]) 
-         except KeyError:
-            raise KeyError("No such non-linearity is available!")
+               non_lin=self.non_lin[non_lin], reuse=reuse)
+         else:
+            self.e_layers['conv{}'.format(idx)] = conv_bn_lrelu(input_layer, ksize=k,
+               out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+               name='conv{}'.format(idx), reuse=reuse)
+
       self.e_layers['pool'] = average_pool(self.e_layers['conv{}'.format(num_layers-1)],
          ksize=8, strides=8, name='pool')
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
@@ -125,15 +139,18 @@ class Model(object):
       """
       raise NotImplementedError("Not Implemented")
 
-   def generator(self, image, z, layers=3, kernels=64, non_lin='relu'):
+   def generator(self, image, z, layers=3, kernels=64, non_lin='relu', norm=None,
+                 reuse=False):
       """Generator graph of GAN
 
       Args:
          image  : Conditioned image on which the generator generates the image 
          z      : Latent space code
          layers : The number of layers either in downsampling / upsampling 
-         kernels : Number of kernels to the first layer of the network
+         kernels: Number of kernels to the first layer of the network
          non_lin: Non linearity to be used
+         norm   : Whether to use batch normalization layer
+         reuse  : Whether to reuse the variables created for generator graph
 
       Returns:
          Generated image
@@ -141,23 +158,17 @@ class Model(object):
       self.g_layers = {}
       with tf.variable_scope('generator'):
          if self.opts.where_add == "input":
-            return self.generator_input(image, z, layers, kernels, non_lin)
+            return self.generator_input(image, z, layers, kernels, non_lin, norm,
+                                        reuse)
          elif self.opts.where_add == "all":
-            return self.generator_all(image, z, layers, kernels, non_lin)
+            return self.generator_all(image, z, layers, kernels, non_lin, norm,
+                                      reuse)
          else:
             raise ValueError("No such type of generator exists!")
 
-   def generator_input(self, image, z, layers=3, kernels=64, non_lin='lrelu'):
+   def generator_input(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
+                       reuse=False):
       """Generator graph where noise is concatenated to the first layer
-
-      Args:
-         image  : Conditioned image on which the generator generates the image
-         z      : Latent space noise
-         layers : The number of layers either in downsampling / upsampling 
-         kernels: Number of kernels to the first layer of the network
-
-      Returns:
-         Generated image
       """
 
       with tf.name_scope('replication'):
@@ -169,13 +180,16 @@ class Model(object):
       # Downsampling
       for idx in xrange(layers):
          factor = min(2**idx, 4)
-         try:
+         if not norm:
             self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, ksize=k, 
                out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
                non_lin=self.non_lin[non_lin])
-         except KeyError:
-            raise KeyError("No such non-linearity is available!")
-         # Maybe add Pooling layer ?            
+         else:
+            self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
+               out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+               name='conv{}'.format(idx), reuse=reuse)
+            
+         # Maybe add Pooling layer ?
          in_layer = self.g_layers['conv{}'.format(idx)]
 
       # Upsampling
@@ -184,12 +198,9 @@ class Model(object):
       for idx in xrange(layers-2, -1, -1):
          out_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[1]
          out_channels = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[-1]
-         try:
-            self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
-               out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-               non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size)
-         except KeyError:
-            raise KeyError("No such non-linearity is available!")
+         self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
+            out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
+            non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size)
          input_layer = self.g_layers['conv{}'.format(new_idx)]
          self.g_layers['conv{}'.format(new_idx)] = add_layers(input_layer,
             self.g_layers['conv{}'.format(idx)])
@@ -200,7 +211,8 @@ class Model(object):
          non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size)
       return self.g_layers['conv{}'.format(new_idx)]
 
-   def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu'):
+   def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
+                     reuse=False):
       """Generator graph where noise is to all the layers
 
       Args:
@@ -215,7 +227,7 @@ class Model(object):
 
 
    def discriminator(self, image, kernels=64, num_layers=3, norm_layer=None, non_lin='lrelu', 
-                     use_sigmoid=False, reuse=False):
+                     use_sigmoid=False, reuse=False, norm=None):
       """Discriminator graph of GAN
       The discriminator is a PatchGAN discriminator which consists of two 
          discriminators for two different scales i.e, 70x70 and 140x140
@@ -233,6 +245,7 @@ class Model(object):
          use_sigmoid: Use Sigmoid layer before the final layer?
          reuse      : Flag to check whether to reuse the variables created for the
                      discriminator graph
+         norm       : Whether to use batch normalization layer
 
       Returns:
          Whether or not the input image is real or fake
@@ -241,29 +254,39 @@ class Model(object):
       with tf.variable_scope('discriminator'):
          if not self.opts.d_usemulti:
             return self.discriminator_patch(image, kernels, num_layers, norm_layer, non_lin, 
-               use_sigmoid, reuse)
+               use_sigmoid, reuse, norm)
          else:
             raise NotImplementedError("Multiple discriminators is not implemented")
 
    def discriminator_patch(self, image, kernels, num_layers, norm_layer, non_lin,
-                           use_sigmoid=False, reuse=False):
+                           use_sigmoid=False, reuse=False, norm=None):
       """PatchGAN discriminator
       """
-      # TODO: Add norm layer
       k, s = 4, 2
       self.d_layers['conv0'] = conv2d(image, ksize=k, out_channels=kernels*1, stride=s, name='conv0',
             non_lin=self.non_lin[non_lin], reuse=reuse)
       for idx in range(1, num_layers):
          input_layer = self.d_layers['conv{}'.format(idx-1)]
          factor = min(2**idx, 8)
-         self.d_layers['conv{}'.format(idx)] = conv2d(input_layer, ksize=k,
-            out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
-            non_lin=self.non_lin[non_lin], reuse=reuse)
+         if not norm:
+            self.d_layers['conv{}'.format(idx)] = conv2d(input_layer, ksize=k,
+               out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
+               non_lin=self.non_lin[non_lin], reuse=reuse)
+         else:
+            self.d_layers['conv{}'.format(idx)] = conv_bn_lrelu(input_layer, ksize=k,
+               out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+               name='conv{}'.format(idx), reuse=reuse)
+
       input_layer = self.d_layers['conv{}'.format(num_layers-1)]
       factor = min(2**num_layers, 8)
-      self.d_layers['conv{}'.format(num_layers)] = conv2d(input_layer, ksize=k, out_channels=
-         kernels*factor, stride=s, name='conv{}'.format(num_layers), reuse=reuse)
-      # TODO: Add a normalization layer and then non_lin?
+      if not norm:
+         self.d_layers['conv{}'.format(num_layers)] = conv2d(input_layer, ksize=k, out_channels=
+            kernels*factor, stride=s, name='conv{}'.format(num_layers), reuse=reuse)
+      else:
+         self.d_layers['conv{}'.format(num_layers)] = conv_bn_lrelu(input_layer, ksize=k,
+            out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+            name='conv{}'.format(num_layers), reuse=reuse)
+
       input_layer = self.d_layers['conv{}'.format(num_layers)]
       self.d_layers['conv{}'.format(num_layers+1)] = conv2d(input_layer, ksize=k, out_channels=1, 
          stride=s, name='conv{}'.format(num_layers+1), reuse=reuse)
@@ -334,7 +357,9 @@ class Model(object):
                    'G_real_loss': .0,
                    'G_fake_loss': .0,
                    'G_loss': .0,
-                   'D_loss': .0
+                   'D_loss': .0,
+                   'enc': .0,
+                   'gen_enc': .0
                   }
       if self.opts.model == 'cvae-gan':
          cVAE_GAN_loss()
@@ -386,6 +411,7 @@ class Model(object):
 
             if np.mod(iteration, self.opts.gen_frq) == 0:
                # Sample the images by setting is_training=False
+               pass
 
             batch_num += 1
 

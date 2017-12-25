@@ -47,18 +47,23 @@ tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory in
 
 # Encoder
 tf.app.flags.DEFINE_string('e_type', 'normal', """Type of the network, {normal or residual}""")
-tf.app.flags.DEFINE_integer('e_layers', 3, """Number of layers in the encoder network""")
+tf.app.flags.DEFINE_integer('e_layers', 5, """Number of layers in the encoder network""")
 tf.app.flags.DEFINE_integer('e_kernels', 64, """Number of kernels for the first layer of encoder""")
-tf.app.flags.DEFINE_string('e_nonlin', 'relu', """Type of non-linearity for the encoder network {relu or lrelu}""")
+tf.app.flags.DEFINE_string('e_nonlin', 'lrelu', """Type of non-linearity for the encoder network {relu or lrelu}""")
+tf.app.flags.DEFINE_boolean('e_norm', True, """Should use batchnormalization for Encoder?""")
 # Generator
 tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noise the generator network {input or all}""")
 tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator network""")
 tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
-tf.app.flags.DEFINE_string('g_nonlin', 'tanh', """Type of non-linearity for the generator network {relu or lrelu}""")
+tf.app.flags.DEFINE_string('g_nonlin', 'relu', """Type of non-linearity for the generator network {relu or lrelu}""")
+tf.app.flags.DEFINE_boolean('g_norm', True, """Should use batchnormalization for Generator?""")
 # Discriminator
 tf.app.flags.DEFINE_string('d_nonlin', 'lrelu', """Type of non-linearity for the discriminator network""")
+tf.app.flags.DEFINE_integer('d_layers', 3, """Number of layers in the discriminator network""")
 tf.app.flags.DEFINE_boolean('d_usemulti', False, """Use multiple discriminators for Discriminator?""")
+tf.app.flags.DEFINE_boolean('d_norm', True, """Should use batchnormalization for Discriminator?""")
 tf.app.flags.DEFINE_integer('d_kernels', 64, """Number of kernels for the first layer of discriminator""")
+tf.app.flags.DEFINE_boolean('d_sigmoid', True, """Should use sigmoid for the final layer for Discriminator?""")
 
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
