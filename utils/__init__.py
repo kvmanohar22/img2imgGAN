@@ -38,6 +38,9 @@ class Dataset(object):
                lines = [line.strip() for line in lines]
                self.t_image_paths = np.array(lines)
 
+   def train_size(self):
+      return len(self.t_image_paths)
+
    def load_batch(self, start_idx, end_idx):
       """Loads a batch of data
       
@@ -84,7 +87,7 @@ class Dataset(object):
       """
       images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.uint8)
       images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.uint8)
-      for idx, paths in enumerate(self.image_paths[start_idx:end_idx]):
+      for idx, paths in enumerate(self.t_image_paths[start_idx:end_idx]):
          path = os.path.join(self.opts.dataset_dir, self.opts.dataset,
                              paths.split(' ').strip())
          try:
