@@ -308,6 +308,32 @@ def batch_normalize(input, is_training, reuse=False, name=None):
       return output
 
 
+def conv_bnorm(input, ksize, out_channels, is_training, stride=1,
+               name=None, reuse=False,
+               initializer=tf.contrib.layers.xavier_initializer(),
+               bias_constant=0.01):
+   """Applies series of operations of `conv`->`batch_norm`
+
+   Args:
+      input        : Input Tensor
+      ksize        : filter's width (= filter's height)
+      out_channels : Number of filters
+      is_training  : Operation is in train / test time
+      stride       : stride of the filter
+      name         : Optional name for the operation
+      reuse        : Whether to reuse this conv layer's weights and biases
+      initializer  : Type of weight matrix initializer
+      bias_constant: Constant value of bias
+
+   Returns:
+      Tensor after the series of operations
+   """
+   with tf.variable_scope(name, reuse=reuse):
+      conv_ac = conv2d(input, ksize, out_channels, stride, name, reuse)
+      conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
+      return conv_bn
+
+
 def conv_bn_relu(input, ksize, out_channels, is_training, stride=1,
                  name=None, reuse=False,
                  initializer=tf.contrib.layers.xavier_initializer(),
@@ -486,11 +512,9 @@ def residual_block_v1(input, out_channels, is_training, stride=1,
 
       # Add shortcut layer if necessary
       if input_channels != out_channels[-1] or stride == 2:
-         shortcut = True
-         short_ac = conv2d(input, ksize=ksize, out_channels=out_channels[-1],
-                           stride=stride, name='shortcut', reuse=reuse)
-         short_bn = batch_normalize(short_ac, is_training=is_training,
-                                    reuse=reuse)
+         shortcut = conv_bnorm(input, ksize=ksize, out_channels=out_channels[-1],
+                               is_training=is_training, stride=stride,
+                               name='shortcut', reuse=reuse)
 
       # First conv block
       conv1 = conv_bn_relu(input, ksize=ksize, out_channels=out_channels[0],
@@ -510,7 +534,7 @@ def residual_block_v1(input, out_channels, is_training, stride=1,
       if shortcut is None:
          output = add_layers(input, conv3_bn, name=name+'_add')
       else:
-         output = add_layers(short_bn, conv3_bn, name=name+'_add')
+         output = add_layers(shortcut, conv3_bn, name=name+'_add')
 
       output = relu(output)
       return output
