@@ -1,4 +1,7 @@
-import numpy as np 
+"""Contains all the modules necessary to build the graphs
+   __author__ = "kvmanohar22"
+"""
+
 import tensorflow as tf
 
 
@@ -45,7 +48,7 @@ def conv2d(input, ksize, out_channels, stride=1, name=None,
            reuse=False, 
            initializer=tf.contrib.layers.xavier_initializer(),
            bias_constant=0.01, non_lin=None):   
-   """2D convolution layer with relu activation
+   """2D convolution layer
 
    Args:
       input        : Input Tensor
@@ -141,14 +144,15 @@ def max_pool(input, kernel=3, stride=2, name=None):
          padding='SAME')
       return output
 
-def average_pool(input, ksize=3, strides=3, padding='VALID', name=None):
+def average_pool(input, ksize=3, stride=3, padding='VALID', name=None):
    """Average Pooling layer
 
    Args:
-      input : Input Tensor
-      ksize : filter's width (= filter's height)
-      stride: stride of the filter
-      name  : Optional name for the operation
+      input  : Input Tensor
+      ksize  : filter's width (= filter's height)
+      stride : stride of the filter
+      padding: Type of padding to use
+      name   : Optional name for the operation
 
    Returns:
       Tensor after avg-pool operation
@@ -158,7 +162,7 @@ def average_pool(input, ksize=3, strides=3, padding='VALID', name=None):
 
    with tf.variable_scope(name):
       ksize = [1, ksize, ksize, 1]
-      strides = [1, strides, strides, 1]
+      strides = [1, stride, stride, 1]
       output = tf.nn.avg_pool(input, ksize=ksize, strides=strides,
          padding=padding)
       return output
@@ -358,7 +362,7 @@ def conv_bn_lrelu(input, ksize, out_channels, is_training, stride=1,
       return conv_rl
 
 
-def dconv_bn_relu(input, kernel, out_channels, out_shape, is_training,
+def dconv_bn_relu(input, ksize, out_channels, out_shape, is_training,
                   batch_size, stride=1, name=None, reuse=False,
                   initializer=tf.contrib.layers.xavier_initializer(),
                   bias_constant=0.01):
@@ -366,7 +370,7 @@ def dconv_bn_relu(input, kernel, out_channels, out_shape, is_training,
 
    Args:
       input        : Input Tensor
-      kernel       : filter's width (= filter's height)
+      ksize        : filter's width (= filter's height)
       out_channels : Number of filters
       out_shape    : Shape of the output tensor
       is_training  : Operation is in train / test time
@@ -381,14 +385,15 @@ def dconv_bn_relu(input, kernel, out_channels, out_shape, is_training,
       Tensor after the series of operations
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
-      conv_ac = deconv(input, kernel, out_shape, out_channels, stride,
-                       name, reuse, batch_size=batch_size)
+      conv_ac = deconv(input, ksize=ksize, out_shape=out_shape,
+                       out_channels=out_channels, stride=stride,
+                       name=name, reuse=reuse, batch_size=batch_size)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
       conv_rl = relu(conv_bn)
       return conv_rl
 
 
-def dconv_bn_lrelu(input, kernel, out_channels, out_shape, is_training,
+def dconv_bn_lrelu(input, ksize, out_channels, out_shape, is_training,
                    batch_size, stride=1, name=None, reuse=False, 
                    initializer=tf.contrib.layers.xavier_initializer(),
                    bias_constant=0.01):
@@ -396,7 +401,7 @@ def dconv_bn_lrelu(input, kernel, out_channels, out_shape, is_training,
 
    Args:
       input        : Input Tensor
-      kernel       : filter's width (= filter's height)
+      ksize        : filter's width (= filter's height)
       out_channels : Number of filters
       out_shape    : Shape of the output tensor
       is_training  : Operation is in train / test time
@@ -411,24 +416,59 @@ def dconv_bn_lrelu(input, kernel, out_channels, out_shape, is_training,
       Tensor after the series of operations
    """
    with tf.variable_scope(name+'_block', reuse=reuse):
-      conv_ac = deconv(input, kernel, out_shape, out_channels, stride,
-                       name, reuse, batch_size=batch_size)
+      conv_ac = deconv(input, ksize=ksize, out_shape=out_shape,
+                       out_channels=out_channels, stride=stride,
+                       name=name, reuse=reuse, batch_size=batch_size)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
       conv_rl = lrelu(conv_bn)
       return conv_rl
 
 
-def residual_block(input, output_channels, is_training, stride=1,
-                   first_block=False, name=None, reuse=False):
-   """Builds a residual block by applying the following operations:
-      batch_norm -> relu -> conv
+def residual_block_v1(input, out_channels, is_training, stride=1,
+                      ksize=3, name=None, reuse=False):
+   """Builds a residual block as mentioned in the original paper at
+      http://arxiv.org/abs/1512.03385
+
+      Shortcut is only added when the number of input channels b/w
+      the `input` layer and the `conv2` layer in the block are not
+      equal or the spatial resolution changes (inferred when the stride
+      to the first conv layer is greater than 1). In which case, shortcut
+      layer consists of only one conv layer with batch_norm.
+
+      Structure is as follows:
+
+         (input)
+            |
+            |----->(conv0)
+            |         |
+            |    (batch_norm)
+            |         |
+            |       (relu)
+            |         |
+            |      (conv1)
+            |         |
+            |    (batch_norm)
+            |         |
+            |       (relu)
+            |         |
+            |      (conv2)
+            |         |
+            |    (batch_norm)
+            |         |
+        (shortcut)    |
+            |         |
+          (add)<------+
+            |
+          (relu)
+            |
+         (output)
 
    Args:
       input        : Input Tensor
-      out_channels : Number of filters
+      out_channels : list containing number of filters for each block
       is_training  : Operation is in train / test time
-      stride       : stride of the filter
-      first_block  : True if this block is the first block of the network
+      stride       : stride of the filter for the first block (=1 for rest)
+      ksize        : filter's width (= filter's height)
       name         : Optional name for the operation
       reuse        : Whether to reuse this conv layer's weights and biases
 
@@ -437,27 +477,63 @@ def residual_block(input, output_channels, is_training, stride=1,
    """
    if name is None:
       name = "residual_block"
+   assert(len(out_channels) == 3), "Must specify input channels for each block"
 
-   input_channels = input.get_shape().as_list()[-2]
-   with tf.variable_scope(name, reuse=reuse):
-      # First conv block 
-      with tf.variable_scope("block_1"):
-         conv1_bn = batch_normalize(input, is_training, reuse=reuse)
-         conv1_ac = relu(conv1_bn)
-         conv1 = conv2d(conv1_ac, kernel=3, stride=stride, name="conv1",
-                        reuse=reuse)
+
+   with tf.variable_scope(name+'_block', reuse=reuse):
+      shortcut, short_bn = None, None
+      input_channels = input.get_shape().as_list()[-1]
+
+      # Add shortcut layer if necessary
+      if input_channels != out_channels[-1] or stride == 2:
+         shortcut = True
+         short_ac = conv2d(input, ksize=ksize, out_channels=out_channels[-1],
+                           stride=stride, name='shortcut', reuse=reuse)
+         short_bn = batch_normalize(short_ac, is_training=is_training,
+                                    reuse=reuse)
+
+      # First conv block
+      conv1 = conv_bn_relu(input, ksize=ksize, out_channels=out_channels[0],
+                           is_training=is_training, stride=stride,
+                           name='conv1', reuse=reuse)
       # Second conv block
-      with tf.variable_scope("block_2"):
-         conv2_bn = batch_normalize(conv1, is_training, reuse=reuse)
-         conv2_ac = relu(conv2_bn)
-         conv2 = conv2d(conv2_ac, kernel=3, stride=stride, name="conv2",
-                        reuse=reuse)
-      if conv2.get_shape().as_list()[-1] != input.get_shape().as_list()[-1]:
-         raise ValueError('Output and input channels do not match')
+      conv2 = conv_bn_relu(conv1, ksize=ksize, out_channels=out_channels[1],
+                           is_training=is_training, stride=1,
+                           name='conv2', reuse=reuse)
+      # Third conv block
+      with tf.variable_scope('conv3_block', reuse=reuse):
+         conv3_ac = conv2d(conv2, ksize=ksize, out_channels=out_channels[-1],
+                           stride=1, name='conv3', reuse=reuse)
+         conv3_bn = batch_normalize(conv3_ac, is_training=is_training,
+                                    reuse=reuse)
+
+      if shortcut is None:
+         output = add_layers(input, conv3_bn, name=name+'_add')
       else:
-         output = input + conv2
+         output = add_layers(short_bn, conv3_bn, name=name+'_add')
+
+      output = relu(output)
       return output
-   
+
+def residual_block_v2(input, out_channels, is_training, stride=1,
+                      ksize=3, name=None, reuse=False):
+   """Defines Residual Network block as specified in the paper:
+      http://arxiv.org/abs/1603.05027
+
+   Args:
+      input        : Input Tensor
+      out_channels : list containing number of filters for each block
+      is_training  : Operation is in train / test time
+      stride       : stride of the filter for the first block (=1 for rest)
+      ksize        : filter's width (= filter's height)
+      name         : Optional name for the operation
+      reuse        : Whether to reuse this conv layer's weights and biases
+
+   Returns:
+      A residual block
+   """
+   raise NotImplementedError("V2 ResNet structure is not implemented")
+
 def add_layers(layer_1, layer_2, name=None):
    """Adds two layers element wise
 
@@ -473,8 +549,8 @@ def add_layers(layer_1, layer_2, name=None):
       name = 'add'
    l1_shape = layer_1.get_shape().as_list()[1:]
    l2_shape = layer_2.get_shape().as_list()[1:]
-   assert(l1_shape == l2_shape), "Shapes {} and {} are not equal\
-   ".format(l1_shape, l2_shape)
+   assert(l1_shape == l2_shape), "Shapes {} and {} are not equal \
+                                 ".format(l1_shape, l2_shape)
    with tf.variable_scope(name):
       return tf.add(layer_1, layer_2)
 
