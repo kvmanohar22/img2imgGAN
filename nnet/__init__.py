@@ -1,25 +1,23 @@
-import tensorflow as tf 
-import numpy as np
-import time
 import datetime
-import os
-import sys
-
-import re
 from datetime import datetime
+import numpy as np
+import os
 
 from modules import *
 from utils import Dataset
 
+
 class Model(object):
+   """Defines the base class for all models
+   """
 
    def __init__(self, opts, is_training):
       """Initialize the model by creating various parts of the graph
 
       Args:
-         opts: All the hyper-parameters of the network
+         opts       : All the hyper-parameters of the network
          is_training: Boolean which indicates whether the model is in train
-            mode or test mode
+                      mode or test mode
       """
       self.opts = opts
       self.h = opts.h
@@ -51,9 +49,9 @@ class Model(object):
       self.summaries()
       self.d_vars = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
       self.ge_vars = [var for var in tf.trainable_variables() if 'generator' or 'encoder' in var.name]
-      # self.model_loss()
-      # self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['gen_enc'], var_list=self.ge_vars)
-      # self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['dis'], var_list=self.d_vars)
+      self.model_loss()
+      self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['gen_enc'], var_list=self.ge_vars)
+      self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['dis'], var_list=self.d_vars)
 
    def placeholders(self):
       """Allocate placeholders of the graph
@@ -128,13 +126,14 @@ class Model(object):
                name='conv{}'.format(idx), reuse=reuse)
 
       self.e_layers['pool'] = average_pool(self.e_layers['conv{}'.format(num_layers-1)],
-         ksize=8, strides=8, name='pool')
+         ksize=8, stride=8, name='pool')
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
       reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
       self.e_layers['full'] = fully_connected(reshape_layer, output_neurons, name='full')
       return self.e_layers['full']
 
-   def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_linearity='relu'):
+   def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu',
+                      norm=None, reuse=False):
       """Residual Network with several residual blocks
       """
       raise NotImplementedError("Not Implemented")
@@ -189,7 +188,6 @@ class Model(object):
                out_channels=kernels*factor, is_training=self.train_mode, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
             
-         # Maybe add Pooling layer ?
          in_layer = self.g_layers['conv{}'.format(idx)]
 
       # Upsampling
@@ -214,14 +212,6 @@ class Model(object):
    def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
                      reuse=False):
       """Generator graph where noise is to all the layers
-
-      Args:
-         image : Conditioned image on which the generator generates the image
-         z     : Latent space noise
-         layers: The number of layers either in downsampling / upsampling 
-
-      Returns:
-         Generated image
       """
       raise NotImplementedError("Not Implemented")
 
@@ -321,11 +311,11 @@ class Model(object):
          Returns:
 
          """
-         self.loss['G_fake_loss']
-         self.loss['G_real_loss']
-         self.loss['G_loss']
-         self.loss['D_loss']
-         self.loss['gan']
+         # self.loss['G_fake_loss']
+         # self.loss['G_real_loss']
+         # self.loss['G_loss']
+         # self.loss['D_loss']
+         # self.loss['gan']
 
       def l1_loss(z1, z2):
          """Implements L1 loss graph
@@ -376,7 +366,7 @@ class Model(object):
       """
       self.test_graph()
       self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
-      data = Dataset()
+      data = Dataset(self.opts)
       self.sess.run(self.init)
       formatter =  "{:s} Epoch: [{:4d}/{:4d}] Batch: [{:2d}/{:2d}]  LR: {:.5f} "
       formatter += "G_fake_loss: {:.5f} G_real_loss: {:.5f} G_loss: {:.5f} D_loss: {:.5f} "
@@ -387,13 +377,13 @@ class Model(object):
             self.opts.batch_size), xrange(self.opts.batch_size, data.train_size(),
             self.opts.batch_size)):
             begin_time = datetime.now().strftime("%Y%m%d%H%M%S")
-            itertion = epoch * (data.train_size()/self.opts.batch_size) + batch_num
+            iteration = epoch * (data.train_size()/self.opts.batch_size) + batch_num
             images_A, images_B = data.load_batch(batch_begin, batch_end)
 
             code = np.random.uniform(low=-1.0, high=1.0, 
                                      size=[self.opts.batch_size,
                                      self.opts.code_len]).astype(np.float32)
-            feed_dict = {self.image_A: imagesA,
+            feed_dict = {self.images_A: images_A,
                          self.images_B: images_B,
                          self.code: code,
                          self.is_training: True
