@@ -10,7 +10,6 @@ function directory_exists() {
    fi
 }
 
-
 # Function to generate the dataset file
 function generate_dataset_file() {
    directory_exists $1
@@ -30,6 +29,6 @@ cd ${DATASET_ROOT}
 
 DATASETS=(facades maps edges2shoes edges2handbags)
 for file in ${DATASETS[@]}; do
-   generate_dataset_file $file
+   generate_dataset_file ${file}
 done
 echo -e "Done !"

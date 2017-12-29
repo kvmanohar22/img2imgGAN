@@ -10,12 +10,14 @@ from scipy.misc import imsave
 import utils
 from utils import *
 
-checker = lambda dir, data, dtype: True if os.path.exists(os.path.join(\
+checker = lambda dir, data, dtype: True if os.path.exists(os.path.join(
                             dir, data, '{}.npy'.format(dtype))) else False
-loader  = lambda dir, data, dtype: np.load(os.path.join(dir, data,\
+loader  = lambda dir, data, dtype: np.load(os.path.join(dir, data,
                             '{}.npy'.format(dtype)))
 
 class Dataset(object):
+   """Helper class for the dataset pipeline
+   """
 
    def __init__(self, opts, load=False):
       """Class to handle data management
@@ -39,6 +41,11 @@ class Dataset(object):
                self.t_image_paths = np.array(lines)
 
    def train_size(self):
+      """Returns the train datasize
+
+      Returns:
+         Size of the training dataset
+      """
       return len(self.t_image_paths)
 
    def load_batch(self, start_idx, end_idx):
@@ -85,8 +92,9 @@ class Dataset(object):
       Returns:
          Images as pairs
       """
-      images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.uint8)
-      images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.uint8)
+      img_dim = self.opts.h
+      images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
+      images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
       for idx, paths in enumerate(self.t_image_paths[start_idx:end_idx]):
          path = os.path.join(self.opts.dataset_dir, self.opts.dataset,
                              paths.split(' ').strip())
