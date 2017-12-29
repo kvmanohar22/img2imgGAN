@@ -4,13 +4,18 @@ import tensorflow as tf
 from utils import *
 from logger import log_config
 from config import FLAGS
-import nnet
+
 import utils
 import nnet
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def main(_):
+   """Begins the execution of the program
+
+   Args:
+      _ : Tensorflow flags app instance
+   """
    priliminary_checks(FLAGS)
    idx = get_runid(FLAGS)
    create_rundirs(FLAGS, idx)

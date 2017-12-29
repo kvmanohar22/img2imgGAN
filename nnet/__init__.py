@@ -1,4 +1,7 @@
-import datetime
+"""Contains various graphs for building the entire model
+   __author__ = "kvmanohar22"
+"""
+
 from datetime import datetime
 import numpy as np
 import os
@@ -36,22 +39,25 @@ class Model(object):
                       'tanh' : lambda x: tanh(x, name='tanh')
                      }
       self.placeholders()
-      self.E  = self.encoder(self.target_images, self.opts.e_layers, self.opts.e_kernels,
-         self.opts.e_nonlin, norm=self.opts.e_norm, reuse=False)
+      self.E_mean, self.E_std  = self.encoder(self.target_images, self.opts.e_layers,
+                                              self.opts.e_kernels, self.opts.e_nonlin,
+                                              norm=self.opts.e_norm, reuse=False)
       self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
-         self.opts.g_kernels, self.opts.g_nonlin, norm=self.opts.g_norm)
-      self.D  = self.discriminator(self.input_images, self.opts.d_kernels, self.opts.d_layers,
-         non_lin=self.opts.d_nonlin, norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
-         reuse=False)
-      self.D_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers, 
-         non_lin=self.opts.d_nonlin, norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
-         reuse=True)
-      self.summaries()
+                               self.opts.g_kernels, self.opts.g_nonlin,
+                               norm=self.opts.g_norm)
+      self.D, self.D_logits   = self.discriminator(self.input_images, self.opts.d_kernels,
+                                                   self.opts.d_layers, non_lin=self.opts.d_nonlin,
+                                                   norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
+                                                   reuse=False)
+      self.D_, self.D_logits_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers,
+                                                   non_lin=self.opts.d_nonlin, norm=self.opts.d_norm,
+                                                   use_sigmoid=self.opts.d_sigmoid, reuse=True)
       self.d_vars = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
       self.ge_vars = [var for var in tf.trainable_variables() if 'generator' or 'encoder' in var.name]
       self.model_loss()
-      self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['gen_enc'], var_list=self.ge_vars)
-      self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.loss['dis'], var_list=self.d_vars)
+      self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
+      # self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
+      # self.summaries()
 
    def placeholders(self):
       """Allocate placeholders of the graph
@@ -72,10 +78,19 @@ class Model(object):
    def summaries(self):
       """Adds all the necessary summaries
       """
+      # TODO : Add histogram summaries from discriminator output
       images_A = tf.summary.image('images_A', self.images_A, max_outputs=10)
       images_B = tf.summary.image('images_B', self.images_B, max_outputs=10)
       gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
-      self.summaries = tf.summary.merge_all()
+
+      # Loss
+      z_summary = tf.summary.histogram('z', self.code)
+      d_loss_fake = tf.summary.scalar('D_loss_fake', self.loss['D_cVAE_fake_loss'])
+      d_loss_real = tf.summary.scalar('D_loss_real', self.loss['D_cVAE_real_loss'])
+      d_loss = tf.summary.scalar('D_loss', self.d_loss)
+      g_loss = tf.summary.scalar('G_loss', self.g_loss)
+      self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
+      self.g_summaries = tf.summary.merge([g_loss, images_A, images_B, gen_images])
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
                reuse=False):
@@ -129,8 +144,9 @@ class Model(object):
          ksize=8, stride=8, name='pool')
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
       reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
-      self.e_layers['full'] = fully_connected(reshape_layer, output_neurons, name='full')
-      return self.e_layers['full']
+      self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean')
+      self.e_layers['full_std'] = fully_connected(reshape_layer, output_neurons, name='full_std')
+      return self.e_layers['full_mean'], self.e_layers['full_std']
 
    def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu',
                       norm=None, reuse=False):
@@ -281,41 +297,56 @@ class Model(object):
       self.d_layers['conv{}'.format(num_layers+1)] = conv2d(input_layer, ksize=k, out_channels=1, 
          stride=s, name='conv{}'.format(num_layers+1), reuse=reuse)
 
-      if use_sigmoid:
-         return sigmoid(self.d_layers['conv{}'.format(num_layers+1)])
+      logits = self.d_layers['conv{}'.format(num_layers+1)]
+      return sigmoid(logits), logits
 
    def model_loss(self):
       """Implements the loss graph
+         All the loss values are stored in a dictionary `self.loss`
       """
 
       def cVAE_GAN_loss():
-         """Computes CVAE-GAN loss
+         """Computes cVAE-GAN loss
          """
-         self.loss['l1']  = l1_loss(self.target_images, self.G)
-         self.loss['gan'] = gan_loss(self.D, self.D_)
-         self.loss['kl']  = kl_divergence(self.E)
+         with tf.variable_scope('cVAE_GAN_loss'):
+            gan_loss(self.D_logits, self.D_logits_, model='cVAE')
+            with tf.variable_scope('KL_loss'):
+               self.loss['KL']  = self.opts.lambda_kl * kl_divergence(self.E_mean, self.E_std)
+            with tf.variable_scope('L1_VAE_loss'):
+               self.loss['L1_VAE']  = self.opts.lambda_img * l1_loss(self.target_images, self.G)
 
       def cLR_GAN_loss():
-         """Computes CLR-GAN loss
+         """Computes cLR-GAN loss
          """
-         self.loss['l1']  = l1_loss(self.E, self.code)
-         self.loss['gan'] = gan_loss(self.D, self.D_)
+         with tf.variable_scope('cLR_GAN_loss'):
+            gan_loss(self.D, self.D_, model='cLR')
+            with tf.variable_scope('L1_latent_loss'):
+               self.loss['L1_latent']  = self.opts.lambda_latent * l1_loss(self.E_mean, self.code)
 
-      def gan_loss(true_logit, fake_logit):
+      def gan_loss(true_logit, fake_logit, model='cLR'):
          """Implements the GAN loss
 
          Args:
             true_logit: Output of discriminator for true image
             fake_logit: Output of discriminator for fake image
-
-         Returns:
-
+            model     : Name of the model to compute loss for
          """
-         # self.loss['G_fake_loss']
-         # self.loss['G_real_loss']
-         # self.loss['G_loss']
-         # self.loss['D_loss']
-         # self.loss['gan']
+         with tf.variable_scope('GAN_loss'):
+            if len(true_logit.get_shape().as_list()) != 2:
+               true_logit = tf.reduce_mean(tf.reshape(true_logit, [self.opts.batch_size, -1]), axis=1)
+               fake_logit = tf.reduce_mean(tf.reshape(fake_logit, [self.opts.batch_size, -1]), axis=1)
+            with tf.variable_scope('D_real_loss'):
+               self.loss['D_{}_real_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
+                     logits=true_logit, labels=tf.ones_like(true_logit))
+            with tf.variable_scope('D_fake_loss'):
+               self.loss['D_{}_fake_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
+                     logits=fake_logit, labels=tf.zeros_like(fake_logit))
+            with tf.variable_scope('G_loss'):
+               self.loss['G_{}_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
+                     logits=fake_logit, labels=tf.ones_like(fake_logit))
+
+            self.loss['D_{}_loss'.format(model)] = self.loss['D_{}_fake_loss'.format(model)] + \
+                                                   self.loss['D_{}_real_loss'.format(model)]
 
       def l1_loss(z1, z2):
          """Implements L1 loss graph
@@ -329,37 +360,49 @@ class Model(object):
          Returns:
             L1 loss
          """
-         pass
+         return tf.reduce_mean(z1-z2)
 
-      def kl_divergence(p1, p2=None):
+      def kl_divergence(p1_mean, p1_std):
          """Apply KL divergence
+            The second distribution is assumed to be unit Gaussian distribution
          
          Args:
-            p1: 1st probability distribution
-            p2: 2nd probability distribution (Usually unit Gaussian distribution)
+            p1_mean: Mean of 1st probability distribution
+            p1_std : Std of 1st probability distribution
 
          Returns:
             KL Divergence between the given distributions
          """
-         pass
+         divergence = 0.5 * tf.reduce_sum(tf.square(p1_mean)+tf.square(p1_std)- \
+                                          2.0 * tf.log(tf.square(p1_std))-1, 1)
+         return tf.reduce_mean(divergence, 0)
 
-      self.loss = {'l1': 0., 'kl': 0., 'gan': 0., 
-                   'G_real_loss': .0,
-                   'G_fake_loss': .0,
-                   'G_loss': .0,
-                   'D_loss': .0,
-                   'enc': .0,
-                   'gen_enc': .0
-                  }
-      if self.opts.model == 'cvae-gan':
-         cVAE_GAN_loss()
-      elif self.opts.model == 'clr-gan':
-         cLR_GAN_loss()
-      elif self.opts.model == 'bicycle':
-         cVAE_GAN_loss()
-         cLR_GAN_loss()
-      else:
-         raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
+      with tf.variable_scope('loss'):
+         self.loss = {}
+         if self.opts.model == 'cvae-gan':
+            cVAE_GAN_loss()
+            self.d_loss = self.loss['D_cVAE_loss']
+            self.g_loss = self.loss['KL'] +\
+                          self.loss['L1_VAE'] +\
+                          self.loss['G_cVAE_loss']
+         elif self.opts.model == 'clr-gan':
+            cLR_GAN_loss()
+            self.d_loss = self.loss['D_cLR_loss']
+            self.g_loss = self.loss['L1_latent'] +\
+                          self.loss['G_cLR_loss']
+         elif self.opts.model == 'bicycle':
+            with tf.variable_scope('Bicycle_GAN_loss'):
+               cVAE_GAN_loss()
+               cLR_GAN_loss()
+               self.d_loss = self.loss['D_cLR_loss'] +\
+                             self.loss['D_cVAE_loss']
+               self.g_loss = self.loss['KL'] +\
+                             self.loss['L1_VAE'] +\
+                             self.loss['L1_latent'] +\
+                             self.loss['G_cLR_loss'] +\
+                             self.loss['G_cVAE_loss']
+         else:
+            raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
 
    def train(self):
       """Train the network
@@ -369,38 +412,55 @@ class Model(object):
       data = Dataset(self.opts)
       self.sess.run(self.init)
       formatter =  "{:s} Epoch: [{:4d}/{:4d}] Batch: [{:2d}/{:2d}]  LR: {:.5f} "
-      formatter += "G_fake_loss: {:.5f} G_real_loss: {:.5f} G_loss: {:.5f} D_loss: {:.5f} "
-      formatter += "E_loss: {:.5f}"
+      formatter += "G_loss: {:.5f} D_loss: {:.5f} "
+
+      # TODO: Treat the distribution as an hyperparameter
+      runtime_z = np.random.uniform(low=-1, high=1, size=(self.opts.sample_num, self.opts.code_len))
+      begin_time = datetime.now().strftime("%Y%m%d%H%M%S")
       for epoch in xrange(self.opts.max_epochs):
          batch_num = 0
          for batch_begin, batch_end in zip(xrange(0, data.train_size(),
             self.opts.batch_size), xrange(self.opts.batch_size, data.train_size(),
             self.opts.batch_size)):
-            begin_time = datetime.now().strftime("%Y%m%d%H%M%S")
+
             iteration = epoch * (data.train_size()/self.opts.batch_size) + batch_num
             images_A, images_B = data.load_batch(batch_begin, batch_end)
 
-            code = np.random.uniform(low=-1.0, high=1.0, 
+            code = np.random.uniform(low=-1.0, high=1.0,
                                      size=[self.opts.batch_size,
-                                     self.opts.code_len]).astype(np.float32)
+                                     self.opts.code_len]
+                                     ).astype(np.float32)
+
+            # Update Discriminator
             feed_dict = {self.images_A: images_A,
                          self.images_B: images_B,
                          self.code: code,
                          self.is_training: True
                         }
+            _, d_summaries, d_loss, d_fake, d_real = self.sess.run(
+                    [self.D_opt, self.d_summaries, self.d_loss,
+                     self.loss['D_cVAE_fake_loss'],
+                     self.loss['D_cVAE_real_loss']
+                     ],
+                    feed_dict=feed_dict)
+            self.writer.add_summary(d_summaries, iteration)
 
-            # Fake Data
-            _, fake_loss, real_loss, g_loss, d_loss, e_loss = self.sess.run(
-               [self.D_opt, ],
-               feed_dict=feed_dict)
+            # Update Generator and Encoder
+            feed_dict = {self.images_A: images_A,
+                         self.images_B: images_B,
+                         self.code: code,
+                         self.is_training: True
+                        }
+            _, g_summaries, g_loss = self.sess.run(
+                    [self.GE_opt, self.g_summaries, self.g_loss],
+                    feed_dict=feed_dict)
+            self.writer.add_summary(g_summaries, iteration)
 
-            # Real Data
-            _, fake_loss, real_loss, g_loss, d_loss, e_loss = self.sess.run(
-               [self.GE_opt],
-               feed_dict=feed_dict)
-
+            print formatter.format(datetime.now(), epoch, self.opts.max_epochs,
+                                   batch_num, data.train_size()/self.opts.batch_size,
+                                   self.opts.base_lr, g_loss, d_fake + d_real)
             if np.mod(iteration, self.opts.gen_frq) == 0:
-               # Sample the images by setting is_training=False
+               # Sample the images by setting `is_training=False`
                pass
 
             batch_num += 1
@@ -420,7 +480,7 @@ class Model(object):
       """Generate the graph and check if the connections are correct
       """
       print 'Test graph is generated...'
-      self.writer = tf.summary.FileWriter(self.opts.summary_dir, self.sess.graph)
+      self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir, graph=self.sess.graph)
 
    def test(self, image):
       """Test the model
@@ -434,4 +494,4 @@ class Model(object):
       if image == '':
          raise ValueError('Specify the path to the test image')
       latest_ckpt = tf.train.latest_checkpoint(self.opts.ckpt)
-      tf.saver.restore(self.sess, latest_ckpt)
+      self.saver.restore(self.sess, latest_ckpt)
