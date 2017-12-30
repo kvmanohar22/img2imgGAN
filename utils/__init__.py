@@ -8,7 +8,6 @@ from skimage.transform import resize
 from scipy.misc import imsave
 
 import utils
-from utils import *
 
 checker = lambda dir, data, dtype: True if os.path.exists(os.path.join(
                             dir, data, '{}.npy'.format(dtype))) else False
@@ -35,7 +34,7 @@ class Dataset(object):
          else:
             # Handle the case for validating and testing
             file_name = os.path.join(opts.dataset_dir, opts.dataset, 'train.txt')
-            with open(file_name) as f:
+            with open(file_name, 'r') as f:
                lines = f.readlines()
                lines = [line.strip() for line in lines]
                self.t_image_paths = np.array(lines)
@@ -95,12 +94,12 @@ class Dataset(object):
       img_dim = self.opts.h
       images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
       images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
-      for idx, paths in enumerate(self.t_image_paths[start_idx:end_idx]):
-         path = os.path.join(self.opts.dataset_dir, self.opts.dataset,
-                             paths.split(' ').strip())
+      for idx, path in enumerate(self.t_image_paths[start_idx:end_idx]):
+         # TODO: Generalize this method to load test/val images
+         path = os.path.join(self.opts.dataset_dir, self.opts.dataset, 'train', path)
          try:
-            image = io.imread(path)
-            image = image/127.5 - 1.0
+            image = utils.imread(path)
+            image = self.normalize_images(images=image)
          except IOError:
             raise IOError("Cannot read the image {}" % path)
 
@@ -108,7 +107,6 @@ class Dataset(object):
          images_A[idx] = image[:, :split_len, :]
          images_B[idx] = image[:, split_len:, :]
 
-      # TODO: Normalize the data before returning
       return images_A, images_B
 
    def create_records(self, dataset):
@@ -190,3 +188,13 @@ class Dataset(object):
       self.records['edges2handbags'] = checker(self.opts.dataset_dir, 'edges2handbags', 'train')
       self.records['facades'] = checker(self.opts.dataset_dir, 'facades', 'val')
       self.records['maps'] = checker(self.opts.dataset_dir, 'maps', 'train')
+
+   def normalize_images(self, images):
+      """Normalizes images into the range [-1, 1]
+      """
+      return images / 127.5 - 1.0
+
+   def inverse_normalize_images(self, images):
+      """Inverse normalize images
+      """
+      return (images + 1.0) * 127.5

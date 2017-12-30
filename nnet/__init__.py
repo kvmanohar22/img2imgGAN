@@ -5,9 +5,11 @@
 from datetime import datetime
 import numpy as np
 import os
+import sys
 
 from modules import *
 from utils import Dataset
+from utils import utils
 
 
 class Model(object):
@@ -28,12 +30,12 @@ class Model(object):
       self.c = opts.c
       self.sess = tf.Session()
       self.train_mode = is_training
-      self.init = tf.global_variables_initializer()
       self.build_graph()
 
    def build_graph(self):
       """Generate various parts of the graph
       """
+      sys.stdout.write(' - Building various parts of the graph...\n')
       self.non_lin = {'relu' : lambda x: relu(x, name='relu'),
                       'lrelu': lambda x: lrelu(x, name='lrelu'),
                       'tanh' : lambda x: tanh(x, name='tanh')
@@ -45,7 +47,7 @@ class Model(object):
       self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
                                self.opts.g_kernels, self.opts.g_nonlin,
                                norm=self.opts.g_norm)
-      self.D, self.D_logits   = self.discriminator(self.input_images, self.opts.d_kernels,
+      self.D, self.D_logits   = self.discriminator(self.target_images, self.opts.d_kernels,
                                                    self.opts.d_layers, non_lin=self.opts.d_nonlin,
                                                    norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
                                                    reuse=False)
@@ -63,6 +65,7 @@ class Model(object):
    def placeholders(self):
       """Allocate placeholders of the graph
       """
+      sys.stdout.write(' - Allocating placholders...\n')
       self.images_A = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_A")
       self.images_B = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_B")
       self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
@@ -223,7 +226,7 @@ class Model(object):
          in_layer = self.g_layers['deconv{}_add'.format(new_idx)]
          new_idx += 1
 
-      self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}'.format(new_idx-1)],
+      self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}_add'.format(new_idx-1)],
          ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
          non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s)
 
@@ -340,12 +343,12 @@ class Model(object):
             if len(true_logit.get_shape().as_list()) != 2:
                true_logit = tf.reduce_mean(tf.reshape(true_logit, [self.opts.batch_size, -1]), axis=1)
                fake_logit = tf.reduce_mean(tf.reshape(fake_logit, [self.opts.batch_size, -1]), axis=1)
-            with tf.variable_scope('D_real_loss'):
-               self.loss['D_{}_real_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
-                     logits=true_logit, labels=tf.ones_like(true_logit))
             with tf.variable_scope('D_fake_loss'):
                self.loss['D_{}_fake_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
                      logits=fake_logit, labels=tf.zeros_like(fake_logit))
+            with tf.variable_scope('D_real_loss'):
+               self.loss['D_{}_real_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
+                     logits=true_logit, labels=tf.ones_like(true_logit))
             with tf.variable_scope('G_loss'):
                self.loss['G_{}_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
                      logits=fake_logit, labels=tf.ones_like(fake_logit))
@@ -365,7 +368,7 @@ class Model(object):
          Returns:
             L1 loss
          """
-         return tf.reduce_mean(z1-z2)
+         return tf.reduce_mean(np.abs(z1-z2))
 
       def kl_divergence(p1_mean, p1_std):
          """Apply KL divergence
@@ -409,18 +412,27 @@ class Model(object):
          else:
             raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
 
+         # TODO: @kvmanohar22, Sma  ll hack for now, remove this later on
+         for k, l in self.loss.iteritems():
+            self.loss[k] = tf.squeeze(self.loss[k])
+         self.d_loss = tf.squeeze(self.d_loss)
+         self.g_loss = tf.squeeze(self.g_loss)
+
    def train(self):
       """Train the network
       """
       self.test_graph()
       self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
-      data = Dataset(self.opts)
+      data = Dataset(self.opts, load=True)
+      self.init = tf.global_variables_initializer()
       self.sess.run(self.init)
-      formatter =  "{:s} Epoch: [{:4d}/{:4d}] Batch: [{:2d}/{:2d}]  LR: {:.5f} "
-      formatter += "G_loss: {:.5f} D_loss: {:.5f} "
+      formatter =  "{} Epoch: [{:3d}/{:4d}] Batch: [{:2d}/{:2d}]  LR: {:.5f} "
+      formatter += "D_fake_loss: {:.5f} D_real_loss: {:.5f} D_loss: {:.5f} G_loss: {:.5f}"
 
       # TODO: Treat the distribution as an hyperparameter
       runtime_z = np.random.uniform(low=-1, high=1, size=(self.opts.sample_num, self.opts.code_len))
+      start_time = datetime.now()
+      print ' - Training the network...'
       for epoch in xrange(self.opts.max_epochs):
          batch_num = 0
          for batch_begin, batch_end in zip(xrange(0, data.train_size(),
@@ -432,8 +444,7 @@ class Model(object):
 
             code = np.random.uniform(low=-1.0, high=1.0,
                                      size=[self.opts.batch_size,
-                                     self.opts.code_len]
-                                     ).astype(np.float32)
+                                     self.opts.code_len]).astype(np.float32)
 
             # Update Discriminator
             feed_dict = {self.images_A: images_A,
@@ -460,9 +471,11 @@ class Model(object):
                     feed_dict=feed_dict)
             self.writer.add_summary(g_summaries, iteration)
 
-            print formatter.format(datetime.now(), epoch, self.opts.max_epochs,
+            elapsed_time = datetime.now() - start_time
+            print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
                                    batch_num, data.train_size()/self.opts.batch_size,
-                                   self.opts.base_lr, g_loss, d_fake + d_real)
+                                   self.opts.base_lr, d_fake, d_real, d_fake + d_real,
+                                   g_loss)
             if np.mod(iteration, self.opts.gen_frq) == 0:
                # Sample the images by setting `is_training=False`
                pass
@@ -471,6 +484,7 @@ class Model(object):
 
          if np.mod(epoch, self.opts.ckpt_frq) == 0:
             self.checkpoint(epoch)
+      self.sess.close()
 
    def checkpoint(self, epoch):
       """Creates a checkpoint at the given epoch
@@ -483,19 +497,24 @@ class Model(object):
    def test_graph(self):
       """Generate the graph and check if the connections are correct
       """
-      print 'Test graph is generated...'
+      sys.stdout.write(' - Generating the graph...\n')
       self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir, graph=self.sess.graph)
 
-   def test(self, image):
+   def test(self, source):
       """Test the model
 
       Args:
-         image: Input image to the model
+         source: Input to the model, either single image or directory containing images
 
       Returns:
          The generated image conditioned on the input image
       """
-      if image == '':
-         raise ValueError('Specify the path to the test image')
-      latest_ckpt = tf.train.latest_checkpoint(self.opts.ckpt)
+      try:
+         img = utils.imread(source)
+      except IOError:
+         image_paths = os.listdir(source)
+
+      latest_ckpt = tf.train.latest_checkpoint(self.opts.ckpt_dir)
       self.saver.restore(self.sess, latest_ckpt)
+
+      # TODO: Complete the forward pass and saving the images
