@@ -100,12 +100,15 @@ class Dataset(object):
                              paths.split(' ').strip())
          try:
             image = io.imread(path)
+            image = image/127.5 - 1.0
          except IOError:
             raise IOError("Cannot read the image {}" % path)
 
          split_len = 600 if self.opts.dataset == 'maps' else 256
          images_A[idx] = image[:, :split_len, :]
          images_B[idx] = image[:, split_len:, :]
+
+      # TODO: Normalize the data before returning
       return images_A, images_B
 
    def create_records(self, dataset):
