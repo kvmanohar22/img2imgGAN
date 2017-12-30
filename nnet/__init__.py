@@ -52,12 +52,13 @@ class Model(object):
       self.D_, self.D_logits_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers,
                                                    non_lin=self.opts.d_nonlin, norm=self.opts.d_norm,
                                                    use_sigmoid=self.opts.d_sigmoid, reuse=True)
-      self.d_vars = [var for var in tf.trainable_variables() if 'discriminator' in var.name]
-      self.ge_vars = [var for var in tf.trainable_variables() if 'generator' or 'encoder' in var.name]
+      self.variables = tf.trainable_variables()
+      self.d_vars = [var for var in self.variables if 'discriminator' in var.name]
+      self.ge_vars = [var for var in self.variables if 'generator' or 'encoder' in var.name]
       self.model_loss()
       self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
-      # self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
-      # self.summaries()
+      self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
+      self.summaries()
 
    def placeholders(self):
       """Allocate placeholders of the graph
@@ -192,6 +193,7 @@ class Model(object):
          in_layer = tf.concat([image, reshaped], axis=3, name='concat')
       k, s = 4, 2
       factor = 1
+
       # Downsampling
       for idx in xrange(layers):
          factor = min(2**idx, 4)
@@ -203,27 +205,30 @@ class Model(object):
             self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
                out_channels=kernels*factor, is_training=self.train_mode, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
-            
          in_layer = self.g_layers['conv{}'.format(idx)]
 
       # Upsampling
       in_layer = self.g_layers['conv{}'.format(layers-1)]
       new_idx = layers
       for idx in xrange(layers-2, -1, -1):
-         out_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[1]
-         out_channels = self.g_layers['conv{}'.format(idx)].get_shape().as_list()[-1]
-         self.g_layers['conv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
+         input_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()
+         out_shape = input_shape[1]
+         out_channels = input_shape[-1]
+         self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
             out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-            non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size)
-         input_layer = self.g_layers['conv{}'.format(new_idx)]
-         self.g_layers['conv{}'.format(new_idx)] = add_layers(input_layer,
+            non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s)
+         input_layer = self.g_layers['deconv{}'.format(new_idx)]
+         self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
             self.g_layers['conv{}'.format(idx)])
-         in_layer = self.g_layers['conv{}'.format(new_idx)]
+         in_layer = self.g_layers['deconv{}_add'.format(new_idx)]
          new_idx += 1
-      self.g_layers['conv{}'.format(layers*2-1)] = deconv(self.g_layers['conv{}'.format(new_idx-1)],
+
+      self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}'.format(new_idx-1)],
          ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
-         non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size)
-      return self.g_layers['conv{}'.format(new_idx)]
+         non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s)
+
+      self.g_layers['deconv{}'.format(layers * 2 - 1)].get_shape().as_list()
+      return self.g_layers['deconv{}'.format(layers*2-1)]
 
    def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
                      reuse=False):
@@ -416,7 +421,6 @@ class Model(object):
 
       # TODO: Treat the distribution as an hyperparameter
       runtime_z = np.random.uniform(low=-1, high=1, size=(self.opts.sample_num, self.opts.code_len))
-      begin_time = datetime.now().strftime("%Y%m%d%H%M%S")
       for epoch in xrange(self.opts.max_epochs):
          batch_num = 0
          for batch_begin, batch_end in zip(xrange(0, data.train_size(),
