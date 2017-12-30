@@ -23,7 +23,7 @@ tf.app.flags.DEFINE_boolean('load_images', False, """Load images before run time
 
 # Training
 tf.app.flags.DEFINE_string('direction', "a2b", """a2b or b2a""")
-tf.app.flags.DEFINE_integer('batch_size', 5, """Batch size""")
+tf.app.flags.DEFINE_integer('batch_size', 1, """Batch size""")
 tf.app.flags.DEFINE_integer('max_epochs', 1000, """Max iterations for training""")
 tf.app.flags.DEFINE_integer('ckpt_frq', 100, """Epoch frequency at which to checkpoint the model""")
 tf.app.flags.DEFINE_integer('gen_frq', 100, """Iteration frequency at which images are generated""")
@@ -34,7 +34,7 @@ tf.app.flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 tf.app.flags.DEFINE_float('lr_decay', 0.9, """Learning rate decay factor""")
 tf.app.flags.DEFINE_float('base_lr', 0.0002, """Base learning rate for VAE""")
 tf.app.flags.DEFINE_boolean('train', False, """Training or testing""")
-tf.app.flags.DEFINE_boolean('resume', False, """Resume the training ?""")
+tf.app.flags.DEFINE_string('resume', "", """Resume the training by specifying ckpt file""")
 
 # Loss specific
 tf.app.flags.DEFINE_float('lambda_img', 10, """Parameter to balance the loss""")
@@ -67,5 +67,5 @@ tf.app.flags.DEFINE_boolean('d_sigmoid', True, """Should use sigmoid for the fin
 
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
-tf.app.flags.DEFINE_string('image', '', """Path of the input image to test the network""")
+tf.app.flags.DEFINE_string('test_source', '', """Path to input image/directory to test the network""")
 tf.app.flags.DEFINE_integer('sample_num', 5, """Number of images to sample at test time""")

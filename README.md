@@ -72,3 +72,22 @@ Replace `Run_1` with the latest directory name
 ```bash
 $ python main.py --help
 ```
+
+### Training the network
+
+To train `model` (say `cvae-gan`) on `dataset` (say `facades`) from scratch,
+```bash
+$ python main.py --train --model cvae-gan --dataset facades
+```
+
+To resume the training from a checkpoint,
+```bash
+$ python main.py --resume <path_to_checkpoint> --model cvae-gan
+```
+
+### Testing the network
+
+To test the model from the given trained models,
+```bash
+$ python main.py --test --model cvae-gan --ckpt <path/to/ckpt> --test_source <path/to/img/dir>
+```

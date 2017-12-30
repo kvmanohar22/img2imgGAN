@@ -1,10 +1,10 @@
-import pprint
 import tensorflow as tf
 
 from utils import *
 from logger import log_config
 from config import FLAGS
 
+from utils.utils import *
 import utils
 import nnet
 
@@ -37,17 +37,13 @@ def main(_):
    FLAGS.w = FLAGS.h
 
    if FLAGS.train:
-      print 'Summary of the model:'
-      pp = pprint.PrettyPrinter()
-      pp.pprint(FLAGS.__flags)
-      net = nnet.Model(FLAGS, FLAGS.train)
-      print 'Training the network...'
+      net = nnet.Model(FLAGS, is_training=True)
       net.train()
-      print 'Done training the network...'
+      print ' - Done training the network...'
    else:
-      print 'Testing the model...'
+      print ' - Testing the model...'
       net = nnet.Model(FLAGS, False)
-      net.test(FLAGS.image)
+      net.test(FLAGS.test_source)
 
 if __name__ == '__main__':
    try:
