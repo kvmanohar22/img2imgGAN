@@ -578,12 +578,19 @@ def add_layers(layer_1, layer_2, name=None):
    with tf.variable_scope(name):
       return tf.add(layer_1, layer_2)
 
-def activation_summary(tensor):
+def activation_summary(tensor, collection='hist_spar'):
    """Write the summary of a tensor
-   
+
    Args:
-      tensor: Creates summary for this tensor
+      tensor    : Creates summary for this tensor
+      collection: Collection to which the summaries are added to
    """
    tensor_name = tensor.op.name
-   tf.summary.histogram(tensor_name+'/activation', tensor)
-   tf.summary.scalar(tensor_name+'/sparsity', tf.nn.zero_fraction(tensor))
+   with tf.variable_scope('summaries'):
+      hist_summary = tf.summary.histogram(tensor_name+'_activation',
+                                          tensor)
+      spar_summary = tf.summary.scalar(tensor_name+'_sparsity',
+                                       tf.nn.zero_fraction(tensor))
+
+   tf.add_to_collection(collection, hist_summary)
+   tf.add_to_collection(collection, spar_summary)
