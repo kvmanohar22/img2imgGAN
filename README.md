@@ -1,13 +1,22 @@
 # img2ImgGAN
 Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 
-- Link to the paper : [ArXiv:1711.11586](https://arxiv.org/abs/1711.11586)
-- Original PyTorch implementation: [Link]()
-- Summary of the paper: [Github Gist]()
+- Link to the paper : [arXiv:1711.11586](https://arxiv.org/abs/1711.11586)
+- PyTorch implementation: [Link]()
+- Summary of the paper: [Gist]()
 
 ## Dependencies
 
 - tensorflow (1.4.0)
+- numpy (1.13.3)
+- scikit-image (0.13.1)
+- scipy (1.0.0)
+
+To install the above dependencies, run:
+
+```bash
+$ sudo pip install -r requirements.txt
+```
 
 ## Hierarchy
 
@@ -22,7 +31,7 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
                   -maps
 ```
 
-## Generating the datasets
+## Setup
 
 - Download the datasets from the following links
    - [edges2handbags]()
@@ -44,7 +53,7 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
   $ bash setup_dataset.sh
   ```
 
-## Running
+## Usage
 
 ### Generating graph:
 

@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import json
 from skimage import io
 from skimage.transform import resize
 from scipy.misc import imsave
@@ -50,3 +51,44 @@ def imread(img_path):
    """
    img = io.imread(img_path)
    return img
+
+def imwrite(image_path, images, inv_normalize=False):
+   """Writes images to a file
+
+   Args:
+      image_path   : Base path for the image
+      images       : image data
+      inv_normalize: Should inverse normalize the images before
+                     writing to the file
+   """
+   try:
+      io.imsave(image_path, images)
+   except:
+      for idx, img in enumerate(images):
+         if inv_normalize:
+            img = inverse_normalize_images(img)
+         imsave(image_path+'_{}.png'.format(idx), img)
+
+def normalize_images(images):
+   """Normalizes images into the range [-1, 1]
+   """
+   return images / 127.5 - 1.0
+
+def inverse_normalize_images(images):
+   """Inverse normalize images
+   """
+   return (images + 1.0) * 127.5
+
+def path_exists(path):
+   """Checks if the path exists
+   """
+   if os.path.exists(path):
+      return True
+   return False
+
+def log_config(idx, flags):
+   """Writes the initial hyperparameters to a file
+   """
+   print ' - Dumping hyper parameters to file "logs/config_{}"...'.format(idx)
+   with open(os.path.join('logs/config_{}'.format(idx)), 'w') as fp:
+      json.dump(flags, fp, indent=4)
