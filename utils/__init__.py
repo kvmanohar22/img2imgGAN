@@ -33,11 +33,29 @@ class Dataset(object):
             raise NotImplementedError("Cannot load images before runtime")
          else:
             # Handle the case for validating and testing
-            file_name = os.path.join(opts.dataset_dir, opts.dataset, 'train.txt')
-            with open(file_name, 'r') as f:
-               lines = f.readlines()
-               lines = [line.strip() for line in lines]
-               self.t_image_paths = np.array(lines)
+            def read_files(file_name):
+               """Reads the contents of a file
+               """
+               with open(file_name, 'r') as f:
+                  lines = f.readlines()
+                  lines = [line.strip() for line in lines]
+                  image_paths = np.array(lines)
+                  return image_paths
+
+            self.t_image_paths = read_files(
+                    os.path.join(opts.dataset_dir,
+                                 opts.dataset,
+                                 'train.txt'))
+            self.v_image_paths = read_files(
+                    os.path.join(opts.dataset_dir,
+                                 opts.dataset,
+                                 'val.txt'))
+            test_path = os.path.join(opts.dataset_dir, opts.dataset, 'test.txt')
+            if utils.path_exists(test_path):
+               self.test_image_paths = read_files(
+                       os.path.join(opts.dataset_dir,
+                                    opts.dataset,
+                                    'test.txt'))
 
    def train_size(self):
       """Returns the train datasize
@@ -57,6 +75,8 @@ class Dataset(object):
       Returns:
          ndarray of images
       """
+      if start_idx == 0:
+         np.random.shuffle(self.t_image_paths)
       if self.opts.load_images:
          raise NotImplementedError("Cannot load images")
       else:
@@ -99,7 +119,7 @@ class Dataset(object):
          path = os.path.join(self.opts.dataset_dir, self.opts.dataset, 'train', path)
          try:
             image = utils.imread(path)
-            image = self.normalize_images(images=image)
+            image = utils.normalize_images(images=image)
          except IOError:
             raise IOError("Cannot read the image {}" % path)
 
@@ -188,13 +208,3 @@ class Dataset(object):
       self.records['edges2handbags'] = checker(self.opts.dataset_dir, 'edges2handbags', 'train')
       self.records['facades'] = checker(self.opts.dataset_dir, 'facades', 'val')
       self.records['maps'] = checker(self.opts.dataset_dir, 'maps', 'train')
-
-   def normalize_images(self, images):
-      """Normalizes images into the range [-1, 1]
-      """
-      return images / 127.5 - 1.0
-
-   def inverse_normalize_images(self, images):
-      """Inverse normalize images
-      """
-      return (images + 1.0) * 127.5
