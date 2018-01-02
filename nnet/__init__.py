@@ -20,16 +20,14 @@ class Model(object):
       """Initialize the model by creating various parts of the graph
 
       Args:
-         opts       : All the hyper-parameters of the network
-         is_training: Boolean which indicates whether the model is in train
-                      mode or test mode
+         opts: All the hyper-parameters of the network
       """
       self.opts = opts
       self.h = opts.h
       self.w = opts.w
       self.c = opts.c
-      self.sess = tf.Session()
       self.train_mode = is_training
+      self.sess = tf.Session()
       self.build_graph()
 
    def build_graph(self):
@@ -41,9 +39,11 @@ class Model(object):
                       'tanh' : lambda x: tanh(x, name='tanh')
                      }
       self.placeholders()
+      self.gen_input_noise = None
       self.E_mean, self.E_std  = self.encoder(self.target_images, self.opts.e_layers,
                                               self.opts.e_kernels, self.opts.e_nonlin,
                                               norm=self.opts.e_norm, reuse=False)
+      self.assign_gen_code()
       self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
                                self.opts.g_kernels, self.opts.g_nonlin,
                                norm=self.opts.g_norm)
@@ -69,7 +69,7 @@ class Model(object):
       self.images_A = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_A")
       self.images_B = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_B")
       self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
-      self.is_training = tf.placeholder(tf.bool, name="is_training")
+      self.is_training = tf.placeholder(tf.bool, name='is_training')
       if self.opts.direction == 'a2b':
          self.input_images  = self.images_A
          self.target_images = self.images_B
@@ -79,10 +79,35 @@ class Model(object):
       else:
          raise ValueError("There is no such image transition type")
 
+   def assign_gen_code(self):
+      """Assigns the noise for the generator
+      """
+      def train_mode():
+         """Noise to be set during training mode"""
+         input_noise = None
+         if self.opts.model == 'cvae-gan' or self.opts.model == 'bicycle':
+            # TODO: Confirm on how this is fed to the generator
+            input_noise = self.E_mean
+         elif self.opts.model == 'clr-gan':
+            input_noise = self.code
+         else:
+            raise ValueError("No such type of model exists !")
+         return input_noise
+
+      def test_mode():
+         """Noise to be set during test mode"""
+         return self.code
+
+      with tf.variable_scope('Noise'):
+         self.gen_input_noise = tf.cond(tf.equal(self.is_training, tf.constant(True)),
+                                        true_fn=train_mode,
+                                        false_fn=test_mode,
+                                        name='Noise')
+         assert self.gen_input_noise is not None, "Generator input noise is not fed"
+
    def summaries(self):
       """Adds all the necessary summaries
       """
-      # TODO : Add histogram summaries from discriminator output
       images_A = tf.summary.image('images_A', self.images_A, max_outputs=10)
       images_B = tf.summary.image('images_B', self.images_B, max_outputs=10)
       gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
@@ -95,11 +120,12 @@ class Model(object):
       g_loss = tf.summary.scalar('G_loss', self.g_loss)
       self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
       self.g_summaries = tf.summary.merge([g_loss, images_A, images_B, gen_images])
+      self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
                reuse=False):
       """Encoder which generates the latent code
-      
+
       Args:
          image     : Image which is to be encoded
          num_layers: Non linearity to the intermediate layers of the network
@@ -141,15 +167,21 @@ class Model(object):
                non_lin=self.non_lin[non_lin], reuse=reuse)
          else:
             self.e_layers['conv{}'.format(idx)] = conv_bn_lrelu(input_layer, ksize=k,
-               out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+               out_channels=kernels*factor, is_training=self.is_training, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
+         activation_summary(self.e_layers['conv{}'.format(idx)])
 
       self.e_layers['pool'] = average_pool(self.e_layers['conv{}'.format(num_layers-1)],
          ksize=8, stride=8, name='pool')
+      activation_summary(self.e_layers['pool'])
+
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
       reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
       self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean')
       self.e_layers['full_std'] = fully_connected(reshape_layer, output_neurons, name='full_std')
+      activation_summary(self.e_layers['full_mean'])
+      activation_summary(self.e_layers['full_std'])
+
       return self.e_layers['full_mean'], self.e_layers['full_std']
 
    def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu',
@@ -191,7 +223,7 @@ class Model(object):
       """
 
       with tf.name_scope('replication'):
-         tiled_z = tf.tile(self.code, [self.opts.batch_size, self.w*self.h], name='tiling')
+         tiled_z = tf.tile(self.gen_input_noise, [self.opts.batch_size, self.w*self.h], name='tiling')
          reshaped = tf.reshape(tiled_z, [-1, self.h, self.w, self.opts.code_len], name='reshape')
          in_layer = tf.concat([image, reshaped], axis=3, name='concat')
       k, s = 4, 2
@@ -206,8 +238,9 @@ class Model(object):
                non_lin=self.non_lin[non_lin])
          else:
             self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-               out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+               out_channels=kernels*factor, is_training=self.is_training, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
+         activation_summary(self.g_layers['conv{}'.format(idx)])
          in_layer = self.g_layers['conv{}'.format(idx)]
 
       # Upsampling
@@ -220,6 +253,8 @@ class Model(object):
          self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
             out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
             non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s)
+         activation_summary(self.g_layers['deconv{}'.format(new_idx)])
+
          input_layer = self.g_layers['deconv{}'.format(new_idx)]
          self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
             self.g_layers['conv{}'.format(idx)])
@@ -229,8 +264,8 @@ class Model(object):
       self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}_add'.format(new_idx-1)],
          ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
          non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s)
+      activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
 
-      self.g_layers['deconv{}'.format(layers * 2 - 1)].get_shape().as_list()
       return self.g_layers['deconv{}'.format(layers*2-1)]
 
    def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
@@ -288,7 +323,7 @@ class Model(object):
                non_lin=self.non_lin[non_lin], reuse=reuse)
          else:
             self.d_layers['conv{}'.format(idx)] = conv_bn_lrelu(input_layer, ksize=k,
-               out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+               out_channels=kernels*factor, is_training=self.is_training, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
 
       input_layer = self.d_layers['conv{}'.format(num_layers-1)]
@@ -298,7 +333,7 @@ class Model(object):
             kernels*factor, stride=s, name='conv{}'.format(num_layers), reuse=reuse)
       else:
          self.d_layers['conv{}'.format(num_layers)] = conv_bn_lrelu(input_layer, ksize=k,
-            out_channels=kernels*factor, is_training=self.train_mode, stride=s,
+            out_channels=kernels*factor, is_training=self.is_training, stride=s,
             name='conv{}'.format(num_layers), reuse=reuse)
 
       input_layer = self.d_layers['conv{}'.format(num_layers)]
@@ -368,7 +403,7 @@ class Model(object):
          Returns:
             L1 loss
          """
-         return tf.reduce_mean(np.abs(z1-z2))
+         return tf.reduce_mean(tf.abs(z1-z2))
 
       def kl_divergence(p1_mean, p1_std):
          """Apply KL divergence
@@ -412,7 +447,6 @@ class Model(object):
          else:
             raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
 
-         # TODO: @kvmanohar22, Sma  ll hack for now, remove this later on
          for k, l in self.loss.iteritems():
             self.loss[k] = tf.squeeze(self.loss[k])
          self.d_loss = tf.squeeze(self.d_loss)
@@ -426,25 +460,28 @@ class Model(object):
       data = Dataset(self.opts, load=True)
       self.init = tf.global_variables_initializer()
       self.sess.run(self.init)
-      formatter =  "{} Epoch: [{:3d}/{:4d}] Batch: [{:2d}/{:2d}]  LR: {:.5f} "
-      formatter += "D_fake_loss: {:.5f} D_real_loss: {:.5f} D_loss: {:.5f} G_loss: {:.5f}"
+      formatter =  "Elapsed Time: {}   Epoch: [{:3d}/{:4d}]   Batch: [{:3d}/{:3d}]   LR: {:.5f}   "
+      formatter += "D_fake_loss: {:.5f}   D_real_loss: {:.5f}   D_loss: {:.5f}   G_loss: {:.5f}"
 
-      # TODO: Treat the distribution as an hyperparameter
-      runtime_z = np.random.uniform(low=-1, high=1, size=(self.opts.sample_num, self.opts.code_len))
+      runtime_z = np.random.uniform(low=-1,
+                                    high=1,
+                                    size=[self.opts.sample_num,
+                                          self.opts.code_len]).astype(np.float32)
       start_time = datetime.now()
-      print ' - Training the network...'
+      print ' - Training the network...\n'
       for epoch in xrange(self.opts.max_epochs):
          batch_num = 0
          for batch_begin, batch_end in zip(xrange(0, data.train_size(),
-            self.opts.batch_size), xrange(self.opts.batch_size, data.train_size(),
+            self.opts.batch_size), xrange(self.opts.batch_size, data.train_size()+1,
             self.opts.batch_size)):
 
             iteration = epoch * (data.train_size()/self.opts.batch_size) + batch_num
             images_A, images_B = data.load_batch(batch_begin, batch_end)
 
-            code = np.random.uniform(low=-1.0, high=1.0,
+            code = np.random.uniform(low=-1.0,
+                                     high=1.0,
                                      size=[self.opts.batch_size,
-                                     self.opts.code_len]).astype(np.float32)
+                                           self.opts.code_len]).astype(np.float32)
 
             # Update Discriminator
             feed_dict = {self.images_A: images_A,
@@ -466,20 +503,30 @@ class Model(object):
                          self.code: code,
                          self.is_training: True
                         }
-            _, g_summaries, g_loss = self.sess.run(
-                    [self.GE_opt, self.g_summaries, self.g_loss],
-                    feed_dict=feed_dict)
+            _, g_summaries, sparsity_sum, g_loss = self.sess.run(
+                    [self.GE_opt, self.g_summaries, self.act_sparsity,
+                     self.g_loss], feed_dict=feed_dict)
             self.writer.add_summary(g_summaries, iteration)
+            self.writer.add_summary(sparsity_sum, iteration)
 
             elapsed_time = datetime.now() - start_time
             print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
-                                   batch_num, data.train_size()/self.opts.batch_size,
+                                   batch_num+1, data.train_size()/self.opts.batch_size,
                                    self.opts.base_lr, d_fake, d_real, d_fake + d_real,
                                    g_loss)
-            if np.mod(iteration, self.opts.gen_frq) == 0:
-               # Sample the images by setting `is_training=False`
-               pass
 
+            # Sample the images
+            if np.mod(iteration, self.opts.gen_frq) == 0 and iteration != 0:
+               print '[Sampling the images...]'
+               feed_dict = {self.images_A: images_A,
+                            self.images_B: images_B,
+                            self.code: runtime_z,
+                            self.is_training: False
+                            }
+               images = self.G.eval(session=self.sess, feed_dict=feed_dict)
+               utils.imwrite(os.path.join(
+                       self.opts.sample_dir, 'iter_{}'.format(iteration)),
+                       images, inv_normalize=True)
             batch_num += 1
 
          if np.mod(epoch, self.opts.ckpt_frq) == 0:
@@ -497,8 +544,15 @@ class Model(object):
    def test_graph(self):
       """Generate the graph and check if the connections are correct
       """
-      sys.stdout.write(' - Generating the graph...\n')
+      sys.stdout.write(' - Generating the test graph...\n')
       self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir, graph=self.sess.graph)
+
+   def validate(self, iteration):
+      """Method to validate the model by sampling images at test time
+
+      Args:
+         iteration: Iteration number during training mode
+      """
 
    def test(self, source):
       """Test the model
