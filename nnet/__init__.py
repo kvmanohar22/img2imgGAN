@@ -38,13 +38,12 @@ class Model(object):
                       'lrelu': lambda x: lrelu(x, name='lrelu'),
                       'tanh' : lambda x: tanh(x, name='tanh')
                      }
-      self.placeholders()
-      self.gen_input_noise = None
+      self.allocate_placeholders()
       self.E_mean, self.E_std  = self.encoder(self.target_images, self.opts.e_layers,
                                               self.opts.e_kernels, self.opts.e_nonlin,
                                               norm=self.opts.e_norm, reuse=False)
       self.assign_gen_code()
-      self.G  = self.generator(self.input_images, self.code, self.opts.g_layers,
+      self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
                                self.opts.g_kernels, self.opts.g_nonlin,
                                norm=self.opts.g_norm)
       self.D, self.D_logits   = self.discriminator(self.target_images, self.opts.d_kernels,
@@ -53,7 +52,8 @@ class Model(object):
                                                    reuse=False)
       self.D_, self.D_logits_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers,
                                                    non_lin=self.opts.d_nonlin, norm=self.opts.d_norm,
-                                                   use_sigmoid=self.opts.d_sigmoid, reuse=True)
+                                                   use_sigmoid=self.opts.d_sigmoid,
+                                                   reuse=True)
       self.variables = tf.trainable_variables()
       self.d_vars = [var for var in self.variables if 'discriminator' in var.name]
       self.ge_vars = [var for var in self.variables if 'generator' or 'encoder' in var.name]
@@ -62,7 +62,7 @@ class Model(object):
       self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
       self.summaries()
 
-   def placeholders(self):
+   def allocate_placeholders(self):
       """Allocate placeholders of the graph
       """
       sys.stdout.write(' - Allocating placholders...\n')
@@ -81,6 +81,7 @@ class Model(object):
 
    def assign_gen_code(self):
       """Assigns the noise for the generator
+         This is dynamic: during Train mode, noise is the encoded vector
       """
       def train_mode():
          """Noise to be set during training mode"""
@@ -196,7 +197,7 @@ class Model(object):
 
       Args:
          image  : Conditioned image on which the generator generates the image 
-         z      : Latent space code
+         z      : Latent space code (or noise when sampling the images)
          layers : The number of layers either in downsampling / upsampling 
          kernels: Number of kernels to the first layer of the network
          non_lin: Non linearity to be used
@@ -223,7 +224,7 @@ class Model(object):
       """
 
       with tf.name_scope('replication'):
-         tiled_z = tf.tile(self.gen_input_noise, [self.opts.batch_size, self.w*self.h], name='tiling')
+         tiled_z = tf.tile(z, [self.opts.batch_size, self.w*self.h], name='tiling')
          reshaped = tf.reshape(tiled_z, [-1, self.h, self.w, self.opts.code_len], name='reshape')
          in_layer = tf.concat([image, reshaped], axis=3, name='concat')
       k, s = 4, 2
@@ -545,7 +546,8 @@ class Model(object):
       """Generate the graph and check if the connections are correct
       """
       sys.stdout.write(' - Generating the test graph...\n')
-      self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir, graph=self.sess.graph)
+      self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir,
+                                          graph=self.sess.graph)
 
    def validate(self, iteration):
       """Method to validate the model by sampling images at test time
