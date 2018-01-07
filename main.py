@@ -1,7 +1,6 @@
 import tensorflow as tf
 
 from utils import *
-from logger import log_config
 from config import FLAGS
 
 from utils.utils import *
@@ -24,7 +23,7 @@ def main(_):
    log_config(idx, FLAGS.__flags)
 
    if FLAGS.archi:
-      net = nnet.Model(FLAGS, False)
+      net = nnet.Model(FLAGS, is_training=False)
       net.test_graph()
       exit()
 
@@ -42,7 +41,7 @@ def main(_):
       print ' - Done training the network...'
    else:
       print ' - Testing the model...'
-      net = nnet.Model(FLAGS, False)
+      net = nnet.Model(FLAGS, is_training=False)
       net.test(FLAGS.test_source)
 
 if __name__ == '__main__':
