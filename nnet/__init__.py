@@ -37,23 +37,66 @@ class Model(object):
       self.non_lin = {'relu' : lambda x: relu(x, name='relu'),
                       'lrelu': lambda x: lrelu(x, name='lrelu'),
                       'tanh' : lambda x: tanh(x, name='tanh')
-                     }
+                      }
       self.allocate_placeholders()
-      self.E_mean, self.E_std  = self.encoder(self.target_images, self.opts.e_layers,
-                                              self.opts.e_kernels, self.opts.e_nonlin,
-                                              norm=self.opts.e_norm, reuse=False)
-      self.assign_gen_code()
-      self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
-                               self.opts.g_kernels, self.opts.g_nonlin,
-                               norm=self.opts.g_norm)
-      self.D, self.D_logits   = self.discriminator(self.target_images, self.opts.d_kernels,
-                                                   self.opts.d_layers, non_lin=self.opts.d_nonlin,
-                                                   norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
-                                                   reuse=False)
-      self.D_, self.D_logits_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers,
-                                                   non_lin=self.opts.d_nonlin, norm=self.opts.d_norm,
-                                                   use_sigmoid=self.opts.d_sigmoid,
-                                                   reuse=True)
+
+      # Common discriminator
+      self.D, self.D_logits = self.discriminator(self.target_images, self.opts.d_kernels,
+                                                 self.opts.d_layers, non_lin=self.opts.d_nonlin,
+                                                 norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
+                                                 reuse=False)
+
+      # Generators and Encoders
+      if self.opts.model == 'cvae-gan':
+         self.E_mean, self.E_std  = self.encoder(self.target_images, self.opts.e_layers,
+                                                 self.opts.e_kernels, self.opts.e_nonlin,
+                                                 norm=self.opts.e_norm, reuse=False)
+         self.assign_gen_code()
+         self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
+                                  self.opts.g_kernels, self.opts.g_nonlin,
+                                  norm=self.opts.g_norm)
+      elif self.opts.model == 'clr-gan':
+         self.assign_gen_code()
+         self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
+                                  self.opts.g_kernels, self.opts.g_nonlin,
+                                  norm=self.opts.g_norm)
+         self.E_mean, self.E_std  = self.encoder(self.G, self.opts.e_layers,
+                                                 self.opts.e_kernels, self.opts.e_nonlin,
+                                                 norm=self.opts.e_norm, reuse=False)
+      elif self.opts.model == 'bicycle':
+         # cVAE-GAN graph
+         self.E_mean_1, self.E_std_1  = self.encoder(self.target_images, self.opts.e_layers,
+                                                     self.opts.e_kernels, self.opts.e_nonlin,
+                                                     norm=self.opts.e_norm, reuse=False)
+         # TODO: The way encoded latent vector is inserted
+         self.G_cvae = self.generator(self.input_images, self.E_mean_1, self.opts.g_layers,
+                                      self.opts.g_kernels, self.opts.g_nonlin,
+                                      norm=self.opts.g_norm)
+
+         # cLR-GAN graph
+         self.G_clr = self.generator(self.input_images, self.code, self.opts.g_layers,
+                                     self.opts.g_kernels, self.opts.g_nonlin,
+                                     norm=self.opts.g_norm, reuse=True)
+         self.E_mean_2, self.E_std_2  = self.encoder(self.G_clr, self.opts.e_layers,
+                                                     self.opts.e_kernels, self.opts.e_nonlin,
+                                                     norm=self.opts.e_norm, reuse=True)
+
+         # Discriminators
+         self.D_cvae, self.D_cvae_logits_ = self.discriminator(self.G_cvae, self.opts.d_kernels,
+                                                 self.opts.d_layers, non_lin=self.opts.d_nonlin,
+                                                 norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
+                                                 reuse=True)
+         self.D_clr, self.D_clr_logits_   = self.discriminator(self.G_clr, self.opts.d_kernels,
+                                                 self.opts.d_layers, non_lin=self.opts.d_nonlin,
+                                                 norm=self.opts.d_norm, use_sigmoid=self.opts.d_sigmoid,
+                                                 reuse=True)
+
+      if self.opts.model == 'cvae-gan' or self.opts.model == 'clr-gan':
+         self.D_, self.D_logits_ = self.discriminator(self.G, self.opts.d_kernels, self.opts.d_layers,
+                                                      non_lin=self.opts.d_nonlin, norm=self.opts.d_norm,
+                                                      use_sigmoid=self.opts.d_sigmoid,
+                                                      reuse=True)
+
       self.variables = tf.trainable_variables()
       self.d_vars = [var for var in self.variables if 'discriminator' in var.name]
       self.ge_vars = [var for var in self.variables if 'generator' or 'encoder' in var.name]
@@ -111,16 +154,24 @@ class Model(object):
       """
       images_A = tf.summary.image('images_A', self.images_A, max_outputs=10)
       images_B = tf.summary.image('images_B', self.images_B, max_outputs=10)
-      gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
+      if self.opts.model == 'bicycle':
+         gen_images_cvae = tf.summary.image('Gen_images_cVAE', self.G_cvae, max_outputs=10)
+         gen_images_clr  = tf.summary.image('Gen_images_cLR', self.G_clr, max_outputs=10)
+         gen_images = [gen_images_clr, gen_images_cvae]
+      else:
+         gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
 
       # Loss
       z_summary = tf.summary.histogram('z', self.code)
-      d_loss_fake = tf.summary.scalar('D_loss_fake', self.loss['D_cVAE_fake_loss'])
-      d_loss_real = tf.summary.scalar('D_loss_real', self.loss['D_cVAE_real_loss'])
+      d_loss_fake = tf.summary.scalar('D_loss_fake', self.loss['D_fake_loss'])
+      d_loss_real = tf.summary.scalar('D_loss_real', self.loss['D_real_loss'])
       d_loss = tf.summary.scalar('D_loss', self.d_loss)
       g_loss = tf.summary.scalar('G_loss', self.g_loss)
       self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
-      self.g_summaries = tf.summary.merge([g_loss, images_A, images_B, gen_images])
+      if self.opts.model == 'bicycle':
+         self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+gen_images)
+      else:
+         self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
       self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
@@ -156,7 +207,7 @@ class Model(object):
       k, s = 4, 2
       try:
          self.e_layers['conv0'] = conv2d(image, ksize=k, out_channels=kernels*1, stride=s, name='conv0',
-            non_lin=self.non_lin[non_lin])
+            non_lin=self.non_lin[non_lin], reuse=reuse)
       except KeyError:
          raise KeyError("No such non-linearity is available!")
       for idx in range(1, num_layers):
@@ -178,8 +229,10 @@ class Model(object):
 
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
       reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
-      self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean')
-      self.e_layers['full_std'] = fully_connected(reshape_layer, output_neurons, name='full_std')
+      self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean',
+                                                   reuse=reuse)
+      self.e_layers['full_std'] = fully_connected(reshape_layer, output_neurons, name='full_std',
+                                                  reuse=reuse)
       activation_summary(self.e_layers['full_mean'])
       activation_summary(self.e_layers['full_std'])
 
@@ -236,7 +289,7 @@ class Model(object):
          if not norm:
             self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, ksize=k, 
                out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
-               non_lin=self.non_lin[non_lin])
+               non_lin=self.non_lin[non_lin], reuse=reuse)
          else:
             self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
                out_channels=kernels*factor, is_training=self.is_training, stride=s,
@@ -253,7 +306,7 @@ class Model(object):
          out_channels = input_shape[-1]
          self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
             out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-            non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s)
+            non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
          activation_summary(self.g_layers['deconv{}'.format(new_idx)])
 
          input_layer = self.g_layers['deconv{}'.format(new_idx)]
@@ -264,7 +317,7 @@ class Model(object):
 
       self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}_add'.format(new_idx-1)],
          ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
-         non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s)
+         non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
       activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
 
       return self.g_layers['deconv{}'.format(layers*2-1)]
@@ -349,48 +402,71 @@ class Model(object):
          All the loss values are stored in a dictionary `self.loss`
       """
 
-      def cVAE_GAN_loss():
+      def cVAE_GAN_loss(true_logit, fake_logit, E_mean, E_std, z1, z2):
          """Computes cVAE-GAN loss
-         """
-         with tf.variable_scope('cVAE_GAN_loss'):
-            gan_loss(self.D_logits, self.D_logits_, model='cVAE')
-            with tf.variable_scope('KL_loss'):
-               self.loss['KL']  = self.opts.lambda_kl * kl_divergence(self.E_mean, self.E_std)
-            with tf.variable_scope('L1_VAE_loss'):
-               self.loss['L1_VAE']  = self.opts.lambda_img * l1_loss(self.target_images, self.G)
-
-      def cLR_GAN_loss():
-         """Computes cLR-GAN loss
-         """
-         with tf.variable_scope('cLR_GAN_loss'):
-            gan_loss(self.D, self.D_, model='cLR')
-            with tf.variable_scope('L1_latent_loss'):
-               self.loss['L1_latent']  = self.opts.lambda_latent * l1_loss(self.E_mean, self.code)
-
-      def gan_loss(true_logit, fake_logit, model='cLR'):
-         """Implements the GAN loss
 
          Args:
             true_logit: Output of discriminator for true image
             fake_logit: Output of discriminator for fake image
-            model     : Name of the model to compute loss for
+            E_mean    : Mean predicted by encoder
+            E_std     : Std predicted by encoder
+            z1        : -
+            z2        : -
          """
-         with tf.variable_scope('GAN_loss'):
-            if len(true_logit.get_shape().as_list()) != 2:
-               true_logit = tf.reduce_mean(tf.reshape(true_logit, [self.opts.batch_size, -1]), axis=1)
-               fake_logit = tf.reduce_mean(tf.reshape(fake_logit, [self.opts.batch_size, -1]), axis=1)
-            with tf.variable_scope('D_fake_loss'):
-               self.loss['D_{}_fake_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
-                     logits=fake_logit, labels=tf.zeros_like(fake_logit))
-            with tf.variable_scope('D_real_loss'):
+         with tf.variable_scope('cVAE_GAN_loss'):
+            gan_loss(true_logit=true_logit,
+                     fake_logit=fake_logit,
+                     model='cVAE')
+            with tf.variable_scope('KL_loss'):
+               self.loss['KL']  = self.opts.lambda_kl * kl_divergence(E_mean, E_std)
+            with tf.variable_scope('L1_VAE_loss'):
+               self.loss['L1_VAE']  = self.opts.lambda_img * l1_loss(z1, z2)
+
+      def cLR_GAN_loss(true_logit, fake_logit, E, skip=False):
+         """Computes cLR-GAN loss
+
+         Args:
+            true_logit: Output of discriminator for true image
+            fake_logit: Output of discriminator for fake image
+            E         : Mean predicted by encoder
+            skip      : Whether to skip the G_loss
+         """
+         with tf.variable_scope('cLR_GAN_loss'):
+            gan_loss(true_logit=true_logit,
+                     fake_logit=fake_logit,
+                     model='cLR',
+                     skip_d_real_loss=skip)
+            with tf.variable_scope('L1_latent_loss'):
+               self.loss['L1_latent']  = self.opts.lambda_latent * l1_loss(E, self.code)
+
+      def gan_loss(true_logit, fake_logit, model='cLR', skip_d_real_loss=False):
+         """Implements the GAN loss
+
+         Args:
+            true_logit      : Output of discriminator for true image
+            fake_logit      : Output of discriminator for fake image
+            model           : Name of the model to compute loss for
+            skip_d_real_loss: Whether to skip G_loss, should be skipped the second time
+                              while training bicycleGAN model
+         """
+         if len(true_logit.get_shape().as_list()) != 2:
+            true_logit = tf.reduce_mean(tf.reshape(true_logit, [self.opts.batch_size, -1]), axis=1)
+            fake_logit = tf.reduce_mean(tf.reshape(fake_logit, [self.opts.batch_size, -1]), axis=1)
+         with tf.variable_scope('D_fake_loss'):
+            self.loss['D_{}_fake_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
+                  logits=fake_logit, labels=tf.zeros_like(fake_logit))
+         with tf.variable_scope('D_real_loss'):
+            if not skip_d_real_loss:
                self.loss['D_{}_real_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
                      logits=true_logit, labels=tf.ones_like(true_logit))
-            with tf.variable_scope('G_loss'):
-               self.loss['G_{}_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
-                     logits=fake_logit, labels=tf.ones_like(fake_logit))
+            else:
+               self.loss['D_{}_real_loss'.format(model)] = 0.
+         with tf.variable_scope('G_loss'):
+            self.loss['G_{}_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
+                  logits=fake_logit, labels=tf.ones_like(fake_logit))
 
-            self.loss['D_{}_loss'.format(model)] = self.loss['D_{}_fake_loss'.format(model)] + \
-                                                   self.loss['D_{}_real_loss'.format(model)]
+         self.loss['D_{}_loss'.format(model)] = self.loss['D_{}_fake_loss'.format(model)] + \
+                                                self.loss['D_{}_real_loss'.format(model)]
 
       def l1_loss(z1, z2):
          """Implements L1 loss graph
@@ -424,27 +500,36 @@ class Model(object):
       with tf.variable_scope('loss'):
          self.loss = {}
          if self.opts.model == 'cvae-gan':
-            cVAE_GAN_loss()
+            cVAE_GAN_loss(self.D_logits, self.D_logits_, self.E_mean,
+                          self.E_std, self.target_images, self.G)
             self.d_loss = self.loss['D_cVAE_loss']
             self.g_loss = self.loss['KL'] +\
                           self.loss['L1_VAE'] +\
                           self.loss['G_cVAE_loss']
+            self.loss['D_fake_loss'] = self.loss['D_cVAE_fake_loss']
+            self.loss['D_real_loss'] = self.loss['D_cVAE_real_loss']
          elif self.opts.model == 'clr-gan':
-            cLR_GAN_loss()
+            cLR_GAN_loss(self.D_logits, self.D_logits_, self.E_mean)
             self.d_loss = self.loss['D_cLR_loss']
             self.g_loss = self.loss['L1_latent'] +\
                           self.loss['G_cLR_loss']
+            self.loss['D_fake_loss'] = self.loss['D_cLR_fake_loss']
+            self.loss['D_real_loss'] = self.loss['D_cLR_real_loss']
          elif self.opts.model == 'bicycle':
             with tf.variable_scope('Bicycle_GAN_loss'):
-               cVAE_GAN_loss()
-               cLR_GAN_loss()
+               cVAE_GAN_loss(self.D_logits, self.D_cvae_logits_, self.E_mean_1,
+                             self.E_std_1, self.target_images, self.G_cvae)
+               cLR_GAN_loss(self.D_logits, self.D_clr_logits_, self.E_mean_2, skip=True)
                self.d_loss = self.loss['D_cLR_loss'] +\
                              self.loss['D_cVAE_loss']
                self.g_loss = self.loss['KL'] +\
                              self.loss['L1_VAE'] +\
-                             self.loss['L1_latent'] +\
+                             self.loss['L1_latent'] + \
                              self.loss['G_cLR_loss'] +\
                              self.loss['G_cVAE_loss']
+               self.loss['D_fake_loss'] = self.loss['D_cLR_fake_loss'] +\
+                                          self.loss['D_cVAE_fake_loss']
+               self.loss['D_real_loss'] = self.loss['D_cVAE_real_loss']
          else:
             raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
 
@@ -492,8 +577,8 @@ class Model(object):
                         }
             _, d_summaries, d_loss, d_fake, d_real = self.sess.run(
                     [self.D_opt, self.d_summaries, self.d_loss,
-                     self.loss['D_cVAE_fake_loss'],
-                     self.loss['D_cVAE_real_loss']
+                     self.loss['D_fake_loss'],
+                     self.loss['D_real_loss']
                      ],
                     feed_dict=feed_dict)
             self.writer.add_summary(d_summaries, iteration)
@@ -524,7 +609,11 @@ class Model(object):
                             self.code: runtime_z,
                             self.is_training: False
                             }
-               images = self.G.eval(session=self.sess, feed_dict=feed_dict)
+               if self.opts.model == 'bicycle':
+                  images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+               else:
+                  images = self.G.eval(session=self.sess, feed_dict=feed_dict)
+
                utils.imwrite(os.path.join(
                        self.opts.sample_dir, 'iter_{}'.format(iteration)),
                        images, inv_normalize=True)
