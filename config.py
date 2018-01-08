@@ -68,4 +68,4 @@ tf.app.flags.DEFINE_boolean('d_sigmoid', True, """Should use sigmoid for the fin
 # Testing
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
 tf.app.flags.DEFINE_string('test_source', '', """Path to input image/directory to test the network""")
-tf.app.flags.DEFINE_integer('sample_num', 5, """Number of images to sample at test time""")
+tf.app.flags.DEFINE_integer('sample_num', 1, """Number of images to sample at test time""")

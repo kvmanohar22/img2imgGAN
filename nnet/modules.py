@@ -300,11 +300,10 @@ def batch_normalize(input, is_training, reuse=False, name=None):
       name = "BatchNorm"
 
    with tf.variable_scope(name, reuse=reuse):
-      output = tf.contrib.layers.batch_norm(
-         inputs=input,
-         center=True,
-         scale=True,
-         is_training=is_training)
+      output = tf.contrib.layers.batch_norm(inputs=input,
+                                            center=True,
+                                            scale=True,
+                                            is_training=is_training)
       return output
 
 
