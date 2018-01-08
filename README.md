@@ -5,6 +5,12 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 - PyTorch implementation: [Link]()
 - Summary of the paper: [Gist]()
 
+
+## BicycleGAN
+
+![](imgs/network.jpeg)
+**Fig 1:** Structure of BicycleGAN. (Image taken from the paper)
+
 ## Dependencies
 
 - tensorflow (1.4.0)
@@ -18,7 +24,7 @@ To install the above dependencies, run:
 $ sudo pip install -r requirements.txt
 ```
 
-## Hierarchy
+## Structure
 
 ```
  -img2imgGAN/
@@ -44,7 +50,8 @@ $ sudo pip install -r requirements.txt
    $ python main.py --create <dataset_name>
    ```
 
-   This creates `train.npy` and `val.npy` in the corresponding dataset directory
+   This creates `train.npy` and `val.npy` in the corresponding dataset directory. This generates very huge files. As an
+   alternate, the next step attempts to read images at run-time during training 
 
 - Alternate to the above step, you could read the images in real time during
   training. To do this, you should create files containing paths to the images.
@@ -59,10 +66,10 @@ $ sudo pip install -r requirements.txt
 
 To visualize the connections between the graph nodes, we can
 generate the graph using the flag `archi`. This would be useful to assert the connections are correct.
+This generates the graph for `bicycleGAN`
 ```bash
-$ python main.py --model <model_name> --archi
+$ python main.py --archi
 ```
-Eg:
 To generate the model graph for `cvae-gan`,
 ```bash
 $ python main.py --model cvae-gan --archi
@@ -87,6 +94,12 @@ $ python main.py --help
 To train `model` (say `cvae-gan`) on `dataset` (say `facades`) from scratch,
 ```bash
 $ python main.py --train --model cvae-gan --dataset facades
+```
+
+The above command by default trains the model in which images from distribution of `domain B` are generated
+conditioned on the images from the distribution of `domain A`. To switch the direction,
+```bash
+$ python main.py --train --model cvae-gan --dataset facades --direction b2a
 ```
 
 To resume the training from a checkpoint,
