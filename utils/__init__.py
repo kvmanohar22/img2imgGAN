@@ -32,27 +32,17 @@ class Dataset(object):
          if opts.load_images:
             raise NotImplementedError("Cannot load images before runtime")
          else:
-            # Handle the case for validating and testing
-            def read_files(file_name):
-               """Reads the contents of a file
-               """
-               with open(file_name, 'r') as f:
-                  lines = f.readlines()
-                  lines = [line.strip() for line in lines]
-                  image_paths = np.array(lines)
-                  return image_paths
-
-            self.t_image_paths = read_files(
+            self.t_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
                                  'train.txt'))
-            self.v_image_paths = read_files(
+            self.v_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
                                  'val.txt'))
             test_path = os.path.join(opts.dataset_dir, opts.dataset, 'test.txt')
             if utils.path_exists(test_path):
-               self.test_image_paths = read_files(
+               self.test_image_paths = utils.read_file_lines(
                        os.path.join(opts.dataset_dir,
                                     opts.dataset,
                                     'test.txt'))
