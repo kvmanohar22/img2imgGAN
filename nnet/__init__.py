@@ -68,8 +68,9 @@ class Model(object):
          self.E_mean_1, self.E_std_1  = self.encoder(self.target_images, self.opts.e_layers,
                                                      self.opts.e_kernels, self.opts.e_nonlin,
                                                      norm=self.opts.e_norm, reuse=False)
-         # TODO: The way encoded latent vector is inserted
-         self.G_cvae = self.generator(self.input_images, self.E_mean_1, self.opts.g_layers,
+         with tf.variable_scope('encoded_noise'):
+            self.encoded_noise = self.E_mean_1 + self.code * self.E_std_1
+         self.G_cvae = self.generator(self.input_images, self.encoded_noise, self.opts.g_layers,
                                       self.opts.g_kernels, self.opts.g_nonlin,
                                       norm=self.opts.g_norm)
 
@@ -103,7 +104,8 @@ class Model(object):
       self.model_loss()
       self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
       self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
-      self.summaries()
+      if not self.opts.full_summaries:
+         self.summaries()
 
    def allocate_placeholders(self):
       """Allocate placeholders of the graph
@@ -130,8 +132,7 @@ class Model(object):
          """Noise to be set during training mode"""
          input_noise = None
          if self.opts.model == 'cvae-gan' or self.opts.model == 'bicycle':
-            # TODO: Confirm on how this is fed to the generator
-            input_noise = self.E_mean
+            input_noise = self.E_mean + self.code * self.E_std
          elif self.opts.model == 'clr-gan':
             input_noise = self.code
          else:
@@ -161,6 +162,10 @@ class Model(object):
       else:
          gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
 
+      # Just to visualize how images are generated
+      self.gen_images_cvae_sample = tf.summary.image('Gen_images_cVAE_sample', self.G_cvae, max_outputs=10)
+      self.gen_images_clr_sample  = tf.summary.image('Gen_images_cLR_sample', self.G_clr, max_outputs=10)
+
       # Loss
       z_summary = tf.summary.histogram('z', self.code)
       d_loss_fake = tf.summary.scalar('D_loss_fake', self.loss['D_fake_loss'])
@@ -173,6 +178,7 @@ class Model(object):
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
       self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
+      self.debug_summaries = tf.summary.merge([self.gen_images_clr_sample, self.gen_images_cvae_sample])
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
                reuse=False):
@@ -221,22 +227,27 @@ class Model(object):
             self.e_layers['conv{}'.format(idx)] = conv_bn_lrelu(input_layer, ksize=k,
                out_channels=kernels*factor, is_training=self.is_training, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
-         activation_summary(self.e_layers['conv{}'.format(idx)])
+         if not self.opts.full_summaries:
+            activation_summary(self.e_layers['conv{}'.format(idx)])
 
       self.e_layers['pool'] = average_pool(self.e_layers['conv{}'.format(num_layers-1)],
          ksize=8, stride=8, name='pool')
-      activation_summary(self.e_layers['pool'])
+      if not self.opts.full_summaries:
+         activation_summary(self.e_layers['pool'])
 
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
       reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
       self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean',
                                                    reuse=reuse)
-      self.e_layers['full_std'] = fully_connected(reshape_layer, output_neurons, name='full_std',
+      # This layers predicts the `log(var)`, to get the std,
+      # std = exp(0.5 * log(var))
+      self.e_layers['full_logvar'] = fully_connected(reshape_layer, output_neurons, name='full_logvar',
                                                   reuse=reuse)
-      activation_summary(self.e_layers['full_mean'])
-      activation_summary(self.e_layers['full_std'])
+      if not self.opts.full_summaries:
+         activation_summary(self.e_layers['full_mean'])
+         activation_summary(self.e_layers['full_logvar'])
 
-      return self.e_layers['full_mean'], self.e_layers['full_std']
+      return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
 
    def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu',
                       norm=None, reuse=False):
@@ -277,7 +288,7 @@ class Model(object):
       """
 
       with tf.name_scope('replication'):
-         tiled_z = tf.tile(z, [self.opts.batch_size, self.w*self.h], name='tiling')
+         tiled_z = tf.tile(z, [1, self.w*self.h], name='tiling')
          reshaped = tf.reshape(tiled_z, [-1, self.h, self.w, self.opts.code_len], name='reshape')
          in_layer = tf.concat([image, reshaped], axis=3, name='concat')
       k, s = 4, 2
@@ -294,7 +305,8 @@ class Model(object):
             self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
                out_channels=kernels*factor, is_training=self.is_training, stride=s,
                name='conv{}'.format(idx), reuse=reuse)
-         activation_summary(self.g_layers['conv{}'.format(idx)])
+         if not self.opts.full_summaries:
+            activation_summary(self.g_layers['conv{}'.format(idx)])
          in_layer = self.g_layers['conv{}'.format(idx)]
 
       # Upsampling
@@ -307,7 +319,8 @@ class Model(object):
          self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
             out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
             non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
-         activation_summary(self.g_layers['deconv{}'.format(new_idx)])
+         if not self.opts.full_summaries:
+            activation_summary(self.g_layers['deconv{}'.format(new_idx)])
 
          input_layer = self.g_layers['deconv{}'.format(new_idx)]
          self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
@@ -318,7 +331,8 @@ class Model(object):
       self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}_add'.format(new_idx-1)],
          ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
          non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
-      activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
+      if not self.opts.full_summaries:
+         activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
 
       return self.g_layers['deconv{}'.format(layers*2-1)]
 
@@ -384,7 +398,8 @@ class Model(object):
       factor = min(2**num_layers, 8)
       if not norm:
          self.d_layers['conv{}'.format(num_layers)] = conv2d(input_layer, ksize=k, out_channels=
-            kernels*factor, stride=s, name='conv{}'.format(num_layers), reuse=reuse)
+            kernels*factor, stride=s, name='conv{}'.format(num_layers), non_lin=self.non_lin[non_lin],
+            reuse=reuse)
       else:
          self.d_layers['conv{}'.format(num_layers)] = conv_bn_lrelu(input_layer, ksize=k,
             out_channels=kernels*factor, is_training=self.is_training, stride=s,
@@ -399,7 +414,7 @@ class Model(object):
 
    def model_loss(self):
       """Implements the loss graph
-         All the loss values are stored in a dictionary `self.loss`
+         All the loss values are stored in the dictionary `self.loss`
       """
 
       def cVAE_GAN_loss(true_logit, fake_logit, E_mean, E_std, z1, z2):
@@ -453,17 +468,17 @@ class Model(object):
             true_logit = tf.reduce_mean(tf.reshape(true_logit, [self.opts.batch_size, -1]), axis=1)
             fake_logit = tf.reduce_mean(tf.reshape(fake_logit, [self.opts.batch_size, -1]), axis=1)
          with tf.variable_scope('D_fake_loss'):
-            self.loss['D_{}_fake_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
-                  logits=fake_logit, labels=tf.zeros_like(fake_logit))
+            self.loss['D_{}_fake_loss'.format(model)] = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+                  logits=fake_logit, labels=tf.zeros_like(fake_logit)))
          with tf.variable_scope('D_real_loss'):
             if not skip_d_real_loss:
-               self.loss['D_{}_real_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
-                     logits=true_logit, labels=tf.ones_like(true_logit))
+               self.loss['D_{}_real_loss'.format(model)] = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+                     logits=true_logit, labels=tf.ones_like(true_logit)))
             else:
                self.loss['D_{}_real_loss'.format(model)] = 0.
          with tf.variable_scope('G_loss'):
-            self.loss['G_{}_loss'.format(model)] = tf.nn.sigmoid_cross_entropy_with_logits(
-                  logits=fake_logit, labels=tf.ones_like(fake_logit))
+            self.loss['G_{}_loss'.format(model)] = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+                  logits=fake_logit, labels=tf.ones_like(fake_logit)))
 
          self.loss['D_{}_loss'.format(model)] = self.loss['D_{}_fake_loss'.format(model)] + \
                                                 self.loss['D_{}_real_loss'.format(model)]
@@ -494,8 +509,8 @@ class Model(object):
             KL Divergence between the given distributions
          """
          divergence = 0.5 * tf.reduce_sum(tf.square(p1_mean)+tf.square(p1_std)- \
-                                          2.0 * tf.log(tf.square(p1_std))-1, 1)
-         return tf.reduce_mean(divergence, 0)
+                                          1.0 * tf.log(tf.square(p1_std))-1, axis=1)
+         return tf.reduce_mean(divergence, axis=0)
 
       with tf.variable_scope('loss'):
          self.loss = {}
@@ -533,11 +548,6 @@ class Model(object):
          else:
             raise ValueError("\"{}\" type of architecture doesn't exist for loss !".format(self.opts.model))
 
-         for k, l in self.loss.iteritems():
-            self.loss[k] = tf.squeeze(self.loss[k])
-         self.d_loss = tf.squeeze(self.d_loss)
-         self.g_loss = tf.squeeze(self.g_loss)
-
    def train(self):
       """Train the network
       """
@@ -546,8 +556,8 @@ class Model(object):
       data = Dataset(self.opts, load=True)
       self.init = tf.global_variables_initializer()
       self.sess.run(self.init)
-      formatter =  "Elapsed Time: {}   Epoch: [{:3d}/{:4d}]   Batch: [{:3d}/{:3d}]   LR: {:.5f}   "
-      formatter += "D_fake_loss: {:.5f}   D_real_loss: {:.5f}   D_loss: {:.5f}   G_loss: {:.5f}"
+      formatter =  "Elapsed Time: {}  Epoch: [{:3d}/{:4d}]  Batch: [{:3d}/{:3d}]  LR: {:.5f}  "
+      formatter += "D_fake_loss: {:.5f}  D_real_loss: {:.5f}  D_loss: {:.5f}  G_loss: {:.5f}"
 
       runtime_z = np.random.uniform(low=-1,
                                     high=1,
@@ -610,13 +620,25 @@ class Model(object):
                             self.is_training: False
                             }
                if self.opts.model == 'bicycle':
-                  images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+                  images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+                  images_clr  = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+                  utils.imwrite(os.path.join(
+                          self.opts.sample_dir, 'iter_{}_VAE'.format(iteration)),
+                          images_clr, inv_normalize=True)
+                  utils.imwrite(os.path.join(
+                          self.opts.sample_dir, 'iter_{}_VAE'.format(iteration)),
+                          images_cvae, inv_normalize=True)
+
+                  debug_summaries = self.debug_summaries.eval(session=self.sess,
+                                                              feed_dict=feed_dict)
+                  self.writer.add_summary(debug_summaries, iteration)
+
                else:
                   images = self.G.eval(session=self.sess, feed_dict=feed_dict)
+                  utils.imwrite(os.path.join(
+                          self.opts.sample_dir, 'iter_{}'.format(iteration)),
+                          images, inv_normalize=True)
 
-               utils.imwrite(os.path.join(
-                       self.opts.sample_dir, 'iter_{}'.format(iteration)),
-                       images, inv_normalize=True)
             batch_num += 1
 
          if np.mod(epoch, self.opts.ckpt_frq) == 0:
