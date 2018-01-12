@@ -1,3 +1,5 @@
+"""Contains all the hyper-parameters and various constants"""
+
 import tensorflow as tf
 import os
 
@@ -9,6 +11,7 @@ sample_dir = os.path.join(cwd,'logs', "sample")
 summary_dir = os.path.join(cwd,'logs', "summary")
 
 tf.app.flags.DEFINE_boolean('archi', False, """Test the architecture of the network?""")
+tf.app.flags.DEFINE_boolean('full_summaries', False, """Add detailed summaries of the tensors?""")
 tf.app.flags.DEFINE_string('model', 'bicycle', """Model to train/test {bicycle/cvae-gan/clr-gan}""")
 
 # Data

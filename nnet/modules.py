@@ -303,7 +303,9 @@ def batch_normalize(input, is_training, reuse=False, name=None):
       output = tf.contrib.layers.batch_norm(inputs=input,
                                             center=True,
                                             scale=True,
-                                            is_training=is_training)
+                                            is_training=is_training,
+                                            updates_collections=None,
+                                            scope=name)
       return output
 
 
