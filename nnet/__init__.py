@@ -104,8 +104,7 @@ class Model(object):
       self.model_loss()
       self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
       self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
-      if not self.opts.full_summaries:
-         self.summaries()
+      self.summaries()
 
    def allocate_placeholders(self):
       """Allocate placeholders of the graph
@@ -177,8 +176,11 @@ class Model(object):
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+gen_images)
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
-      self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
       self.debug_summaries = tf.summary.merge([self.gen_images_clr_sample, self.gen_images_cvae_sample])
+      try:
+        self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
+      except:
+        pass
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
                reuse=False):
@@ -554,8 +556,17 @@ class Model(object):
       self.test_graph()
       self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
       data = Dataset(self.opts, load=True)
-      self.init = tf.global_variables_initializer()
-      self.sess.run(self.init)
+
+      if self.opts.resume:
+        try:
+          self.saver.restore(self.sess, self.opts.ckpt)
+          print ' - Successfully restored the checkpoint: {}'.format(self.opts.ckpt)
+        except:
+          raise ValueError(" - Cannot restore the checkpoint file: {}".format(self.opts.ckpt))
+      else:
+        self.init = tf.global_variables_initializer()
+        self.sess.run(self.init)
+
       formatter =  "Elapsed Time: {}  Epoch: [{:3d}/{:4d}]  Batch: [{:3d}/{:3d}]  LR: {:.5f}  "
       formatter += "D_fake_loss: {:.5f}  D_real_loss: {:.5f}  D_loss: {:.5f}  G_loss: {:.5f}"
 
@@ -599,11 +610,11 @@ class Model(object):
                          self.code: code,
                          self.is_training: True
                         }
-            _, g_summaries, sparsity_sum, g_loss = self.sess.run(
+            _, g_summaries, act_summaries, g_loss = self.sess.run(
                     [self.GE_opt, self.g_summaries, self.act_sparsity,
                      self.g_loss], feed_dict=feed_dict)
             self.writer.add_summary(g_summaries, iteration)
-            self.writer.add_summary(sparsity_sum, iteration)
+            self.writer.add_summary(act_summaries, iteration)
 
             elapsed_time = datetime.now() - start_time
             print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
@@ -623,10 +634,10 @@ class Model(object):
                   images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
                   images_clr  = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
                   utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}_VAE'.format(iteration)),
+                          self.opts.sample_dir, 'iter_{}_cLR'.format(iteration)),
                           images_clr, inv_normalize=True)
                   utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}_VAE'.format(iteration)),
+                          self.opts.sample_dir, 'iter_{}_cVAE'.format(iteration)),
                           images_cvae, inv_normalize=True)
 
                   debug_summaries = self.debug_summaries.eval(session=self.sess,

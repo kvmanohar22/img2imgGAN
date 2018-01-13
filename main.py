@@ -35,7 +35,7 @@ def main(_):
    FLAGS.h = 600 if FLAGS.dataset == 'maps' else 256
    FLAGS.w = FLAGS.h
 
-   if FLAGS.train:
+   if FLAGS.train or FLAGS.resume:
       net = nnet.Model(FLAGS, is_training=True)
       net.train()
       print ' - Done training the network...'

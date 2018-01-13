@@ -37,7 +37,7 @@ tf.app.flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 tf.app.flags.DEFINE_float('lr_decay', 0.9, """Learning rate decay factor""")
 tf.app.flags.DEFINE_float('base_lr', 0.0002, """Base learning rate for VAE""")
 tf.app.flags.DEFINE_boolean('train', False, """Training or testing""")
-tf.app.flags.DEFINE_string('resume', "", """Resume the training by specifying ckpt file""")
+tf.app.flags.DEFINE_boolean('resume', "", """Resume the training by specifying ckpt file""")
 
 # Loss specific
 tf.app.flags.DEFINE_float('lambda_img', 10, """Parameter to balance the loss""")
