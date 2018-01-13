@@ -8,8 +8,14 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 
 ## BicycleGAN
 
+- Network
+
 ![](imgs/network.jpeg)
 **Fig 1:** Structure of BicycleGAN. (Image taken from the paper)
+
+- Tensorboard visualization of the entire network
+
+![](imgs/tensorboard.gif)
 
 ## Dependencies
 
