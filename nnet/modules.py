@@ -613,7 +613,7 @@ def residual_block_v2(input, out_channels, is_training, stride=1,
    """
    if name is None:
       name = "residual_block"
-   assert(len(out_channels) == 3), "Must specify input channels for each block"
+   assert(len(out_channels) == 2), "Must specify input channels for each block"
 
    with tf.variable_scope(name+'_block', reuse=reuse):
 

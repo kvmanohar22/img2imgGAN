@@ -213,7 +213,7 @@ class Model(object):
                kernels=kernels, non_lin=non_lin, norm=norm, reuse=reuse)
          elif self.opts.e_type == "residual":
             return self.resnet_encoder(image, num_layers, output_neurons=8,
-               kernels=kernels, non_lin=non_lin, num_blocks=num_blocks)
+               kernels=kernels, non_lin=non_lin, num_blocks=num_blocks, reuse=reuse)
          else:
             raise ValueError("No such type of encoder exists!")
 
@@ -266,7 +266,7 @@ class Model(object):
                       kernels=64, non_lin='relu', norm=None, reuse=False):
       """Residual Network with several residual blocks
       """
-      self.e_layers['conv0'] = conv2d(image, ksize=k, out_channels=kernels*1, stride=s, name='conv0',
+      self.e_layers['conv0'] = conv2d(image, ksize=4, out_channels=kernels*1, stride=2, name='conv0',
         non_lin=self.non_lin[non_lin], reuse=reuse)
 
       input_layer = self.e_layers['conv0']
@@ -274,7 +274,7 @@ class Model(object):
 
       # Add residual blocks
       for idx in xrange(1, num_blocks):
-        factor = kernels * min(idx+1, 4)
+        factor = min(idx+1, 4)
         self.e_layers['block_{}'.format(idx)] = residual_block_v2(input_layer,
              out_channels=[input_channels, kernels*factor], is_training=self.is_training,
              name='block_{}'.format(idx), reuse=reuse)
