@@ -30,6 +30,7 @@ class Model(object):
       self.sess = tf.Session()
       self.build_graph()
 
+
    def build_graph(self):
       """Generate various parts of the graph
       """
@@ -50,7 +51,8 @@ class Model(object):
       if self.opts.model == 'cvae-gan':
          self.E_mean, self.E_std  = self.encoder(self.target_images, self.opts.e_layers,
                                                  self.opts.e_kernels, self.opts.e_nonlin,
-                                                 norm=self.opts.e_norm, reuse=False)
+                                                 norm=self.opts.e_norm, reuse=False,
+                                                 num_blocks=self.opts.e_blocks)
          self.assign_gen_code()
          self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
                                   self.opts.g_kernels, self.opts.g_nonlin,
@@ -60,14 +62,15 @@ class Model(object):
          self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
                                   self.opts.g_kernels, self.opts.g_nonlin,
                                   norm=self.opts.g_norm)
-         self.E_mean, self.E_std  = self.encoder(self.G, self.opts.e_layers,
-                                                 self.opts.e_kernels, self.opts.e_nonlin,
-                                                 norm=self.opts.e_norm, reuse=False)
+         self.E_mean, self.E_std  = self.encoder(self.G, self.opts.e_layers, self.opts.e_kernels,
+                                                 self.opts.e_nonlin, norm=self.opts.e_norm,
+                                                 num_blocks=self.opts.e_blocks, reuse=False)
       elif self.opts.model == 'bicycle':
          # cVAE-GAN graph
          self.E_mean_1, self.E_std_1  = self.encoder(self.target_images, self.opts.e_layers,
                                                      self.opts.e_kernels, self.opts.e_nonlin,
-                                                     norm=self.opts.e_norm, reuse=False)
+                                                     norm=self.opts.e_norm, reuse=False,
+                                                     num_blocks=self.opts.e_blocks)
          with tf.variable_scope('encoded_noise'):
             self.encoded_noise = self.E_mean_1 + self.code * self.E_std_1
          self.G_cvae = self.generator(self.input_images, self.encoded_noise, self.opts.g_layers,
@@ -80,7 +83,8 @@ class Model(object):
                                      norm=self.opts.g_norm, reuse=True)
          self.E_mean_2, self.E_std_2  = self.encoder(self.G_clr, self.opts.e_layers,
                                                      self.opts.e_kernels, self.opts.e_nonlin,
-                                                     norm=self.opts.e_norm, reuse=True)
+                                                     norm=self.opts.e_norm, reuse=True,
+                                                     num_blocks=self.opts.e_blocks)
 
          # Discriminators
          self.D_cvae, self.D_cvae_logits_ = self.discriminator(self.G_cvae, self.opts.d_kernels,
@@ -106,6 +110,7 @@ class Model(object):
       self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
       self.summaries()
 
+
    def allocate_placeholders(self):
       """Allocate placeholders of the graph
       """
@@ -122,6 +127,7 @@ class Model(object):
          self.target_images = self.images_A
       else:
          raise ValueError("There is no such image transition type")
+
 
    def assign_gen_code(self):
       """Assigns the noise for the generator
@@ -149,6 +155,7 @@ class Model(object):
                                         name='Noise')
          assert self.gen_input_noise is not None, "Generator input noise is not fed"
 
+
    def summaries(self):
       """Adds all the necessary summaries
       """
@@ -173,7 +180,7 @@ class Model(object):
       g_loss = tf.summary.scalar('G_loss', self.g_loss)
       self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
       if self.opts.model == 'bicycle':
-         self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+gen_images)
+         self.g_summaries = tf.summary.merge([g_loss])#, images_A, images_B]+gen_images)
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
       self.debug_summaries = tf.summary.merge([self.gen_images_clr_sample, self.gen_images_cvae_sample])
@@ -182,8 +189,9 @@ class Model(object):
       except:
         pass
 
+
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
-               reuse=False):
+               reuse=False, num_blocks=4):
       """Encoder which generates the latent code
 
       Args:
@@ -193,6 +201,7 @@ class Model(object):
          non_lin   : Type of non-linearity activation
          norm      : Should use batch normalization
          reuse     : Should reuse the variables?
+         num_blocks: The number of residual blocks
 
       Returns:
          The encoded latent code
@@ -204,9 +213,10 @@ class Model(object):
                kernels=kernels, non_lin=non_lin, norm=norm, reuse=reuse)
          elif self.opts.e_type == "residual":
             return self.resnet_encoder(image, num_layers, output_neurons=8,
-               kernels=kernels, non_lin=non_lin)
+               kernels=kernels, non_lin=non_lin, num_blocks=num_blocks)
          else:
             raise ValueError("No such type of encoder exists!")
+
 
    def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='lrelu',
                       norm=None, reuse=False):
@@ -251,11 +261,42 @@ class Model(object):
 
       return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
 
-   def resnet_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='relu',
-                      norm=None, reuse=False):
+
+   def resnet_encoder(self, image, num_layers=4, num_blocks=4, output_neurons=1,
+                      kernels=64, non_lin='relu', norm=None, reuse=False):
       """Residual Network with several residual blocks
       """
-      raise NotImplementedError("Not Implemented")
+      self.e_layers['conv0'] = conv2d(image, ksize=k, out_channels=kernels*1, stride=s, name='conv0',
+        non_lin=self.non_lin[non_lin], reuse=reuse)
+
+      input_layer = self.e_layers['conv0']
+      input_channels = self.e_layers['conv0'].get_shape().as_list()[-1]
+
+      # Add residual blocks
+      for idx in xrange(1, num_blocks):
+        factor = kernels * min(idx+1, 4)
+        self.e_layers['block_{}'.format(idx)] = residual_block_v2(input_layer,
+             out_channels=[input_channels, kernels*factor], is_training=self.is_training,
+             name='block_{}'.format(idx), reuse=reuse)
+        input_layer = self.e_layers['block_{}'.format(idx)]
+        input_channels = self.e_layers['block_{}'.format(idx)].get_shape().as_list()[-1]
+
+      self.e_layers['pool'] = average_pool(self.e_layers['block_{}'.format(num_blocks-1)],
+         ksize=8, stride=8, name='pool')
+      if not self.opts.full_summaries:
+         activation_summary(self.e_layers['pool'])
+
+      units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
+      reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
+      self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean',
+                                                   reuse=reuse)
+      self.e_layers['full_logvar'] = fully_connected(reshape_layer, output_neurons, name='full_logvar',
+                                                  reuse=reuse)
+      if not self.opts.full_summaries:
+         activation_summary(self.e_layers['full_mean'])
+         activation_summary(self.e_layers['full_logvar'])
+
+      return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
 
    def generator(self, image, z, layers=3, kernels=64, non_lin='relu', norm=None,
                  reuse=False):
@@ -614,7 +655,7 @@ class Model(object):
                     [self.GE_opt, self.g_summaries, self.act_sparsity,
                      self.g_loss], feed_dict=feed_dict)
             self.writer.add_summary(g_summaries, iteration)
-            self.writer.add_summary(act_summaries, iteration)
+            # self.writer.add_summary(act_summaries, iteration)
 
             elapsed_time = datetime.now() - start_time
             print formatter.format(elapsed_time, epoch, self.opts.max_epochs,

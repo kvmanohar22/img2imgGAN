@@ -52,6 +52,7 @@ tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory in
 tf.app.flags.DEFINE_string('e_type', 'normal', """Type of the network, {normal or residual}""")
 tf.app.flags.DEFINE_integer('e_layers', 5, """Number of layers in the encoder network""")
 tf.app.flags.DEFINE_integer('e_kernels', 64, """Number of kernels for the first layer of encoder""")
+tf.app.flags.DEFINE_integer('e_blocks', 4, """Number of residual blocks for encoder""")
 tf.app.flags.DEFINE_string('e_nonlin', 'lrelu', """Type of non-linearity for the encoder network {relu or lrelu}""")
 tf.app.flags.DEFINE_boolean('e_norm', True, """Should use batchnormalization for Encoder?""")
 # Generator
