@@ -113,3 +113,11 @@ $ sudo pip install -r requirements.txt
   ```bash
   $ python main.py --test --model cvae-gan --ckpt <path/to/ckpt> --test_source <path/to/img/dir>
   ```
+
+## TODO
+- [x] Residual Encoder
+- [ ] Multiple discriminators for `cVAE-GAN` and `cLR-GAN`
+
+## License
+
+Released under [the MIT license](LICENSE)
