@@ -41,7 +41,7 @@ class Dataset(object):
             self.t_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
-                                 'train.txt'))
+                                 'train.txt'))[:100]
             self.v_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
@@ -64,6 +64,27 @@ class Dataset(object):
       except:
          length = len(self.t_images_data)
       return length
+
+   def load_val_batch(self):
+      """Loads validation images"""
+
+      img_dim = self.opts.h
+      images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
+      images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
+      for idx, path in enumerate(self.v_image_paths[:self.opts.batch_size]):
+         path = os.path.join(self.opts.dataset_dir, self.opts.dataset, 'val', path)
+         try:
+            image = utils.imread(path)
+            image = utils.normalize_images(images=image)
+         except IOError:
+            raise IOError("Cannot read the image {}" % path)
+
+         split_len = 600 if self.opts.dataset == 'maps' else 256
+         images_A[idx] = image[:, :split_len, :]
+         images_B[idx] = image[:, split_len:, :]
+
+      return images_A, images_B
+      
 
    def load_batch(self, start_idx, end_idx):
       """Loads a batch of data
