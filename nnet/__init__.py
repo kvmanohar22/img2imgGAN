@@ -340,40 +340,66 @@ class Model(object):
       # Downsampling
       for idx in xrange(layers):
          factor = min(2**idx, 4)
-         if not norm:
-            self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, ksize=k, 
-               out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
-               non_lin=self.non_lin[non_lin], reuse=reuse)
-         else:
-            self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-               out_channels=kernels*factor, is_training=self.is_training, stride=s,
-               name='conv{}'.format(idx), reuse=reuse)
-         if not self.opts.full_summaries:
-            activation_summary(self.g_layers['conv{}'.format(idx)])
-         in_layer = self.g_layers['conv{}'.format(idx)]
+         with tf.variable_scope('down_{}'.format(idx+1)):
+           if not norm:
+              self.g_layers['conv{}_0'.format(idx)] = conv2d(in_layer, ksize=k, 
+                 out_channels=kernels*factor, stride=1, name='conv{}'.format(idx),
+                 non_lin=self.non_lin[non_lin], reuse=reuse)
+           else:
+              self.g_layers['conv{}_0'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
+                 out_channels=kernels*factor, is_training=self.is_training, stride=1,
+                 name='conv0{}'.format(idx), reuse=reuse)
+              in_layer = self.g_layers['conv{}_0'.format(idx)]
+              self.g_layers['conv{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
+                 out_channels=kernels*factor, is_training=self.is_training, stride=1,
+                 name='conv1{}'.format(idx), reuse=reuse, )
+              if idx < layers-1:
+                in_layer = self.g_layers['conv{}_1'.format(idx)]
+                self.g_layers['pool{}'.format(idx)] = max_pool(in_layer)
+           if not self.opts.full_summaries:
+              activation_summary(self.g_layers['conv{}'.format(idx)])
+           try:
+              in_layer = self.g_layers['pool{}'.format(idx)]
+           except:
+              pass
 
       # Upsampling
-      in_layer = self.g_layers['conv{}'.format(layers-1)]
-      new_idx = layers
+      in_layer = self.g_layers['conv{}_1'.format(layers-1)]
+      new_idx, up_idx = layers, 1
       for idx in xrange(layers-2, -1, -1):
-         input_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()
-         out_shape = input_shape[1]
-         out_channels = input_shape[-1]
-         self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
-            out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-            non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
-         if not self.opts.full_summaries:
-            activation_summary(self.g_layers['deconv{}'.format(new_idx)])
+         factor = min(2**(idx), 4)
+         with tf.variable_scope('up_{}'.format(up_idx)):
+           # Deconv
+           input_shape = self.g_layers['conv{}_1'.format(idx)].get_shape().as_list()
+           out_shape = input_shape[1]
+           out_channels = input_shape[-1]
+           self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
+              out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
+              non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
+           if not self.opts.full_summaries:
+              activation_summary(self.g_layers['deconv{}'.format(new_idx)])
+           # Add layers
+           input_layer = self.g_layers['deconv{}'.format(new_idx)]
+           self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
+              self.g_layers['conv{}_1'.format(idx)])
+           in_layer = self.g_layers['deconv{}_add'.format(new_idx)]
+           # Convolutions
+           self.g_layers['convT{}_0'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
+              out_channels=kernels*factor, is_training=self.is_training, stride=1,
+              name='convT0{}'.format(idx), reuse=reuse)
+           in_layer = self.g_layers['convT{}_0'.format(idx)]
+           self.g_layers['convT{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
+              out_channels=kernels*factor, is_training=self.is_training, stride=1,
+              name='convT1{}'.format(idx), reuse=reuse)
+           
+           in_layer = self.g_layers['convT{}_1'.format(idx)]
+           new_idx += 1
+           up_idx += 1
 
-         input_layer = self.g_layers['deconv{}'.format(new_idx)]
-         self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
-            self.g_layers['conv{}'.format(idx)])
-         in_layer = self.g_layers['deconv{}_add'.format(new_idx)]
-         new_idx += 1
-
-      self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}_add'.format(new_idx-1)],
-         ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
-         non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
+      in_layer = self.g_layers['convT0_1']
+      self.g_layers['deconv{}'.format(layers*2-1)] = conv2d(in_layer,
+         ksize=k, out_channels=3, name='output', non_lin=self.non_lin['tanh'],
+         stride=1, reuse=reuse)
       if not self.opts.full_summaries:
          activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
 
@@ -617,7 +643,7 @@ class Model(object):
                                           self.opts.code_len]).astype(np.float32)
       start_time = datetime.now()
       print ' - Training the network...\n'
-      for epoch in xrange(self.opts.max_epochs):
+      for epoch in xrange(1, self.opts.max_epochs):
          batch_num = 0
          for batch_begin, batch_end in zip(xrange(0, data.train_size(),
             self.opts.batch_size), xrange(self.opts.batch_size, data.train_size()+1,
@@ -651,11 +677,11 @@ class Model(object):
                          self.code: code,
                          self.is_training: True
                         }
-            _, g_summaries, act_summaries, g_loss = self.sess.run(
-                    [self.GE_opt, self.g_summaries, self.act_sparsity,
-                     self.g_loss], feed_dict=feed_dict)
-            self.writer.add_summary(g_summaries, iteration)
-            # self.writer.add_summary(act_summaries, iteration)
+            for i in xrange(self.opts.g_update):
+              _, g_summaries, act_summaries, g_loss = self.sess.run(
+                      [self.GE_opt, self.g_summaries, self.act_sparsity,
+                       self.g_loss], feed_dict=feed_dict)
+              self.writer.add_summary(g_summaries, iteration)
 
             elapsed_time = datetime.now() - start_time
             print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
@@ -664,22 +690,18 @@ class Model(object):
                                    g_loss)
 
             # Sample the images
-            if np.mod(iteration, self.opts.gen_frq) == 0 and iteration != 0:
-               print '[Sampling the images...]'
+            if np.mod(iteration, self.opts.gen_frq) == 0:
+               print ' - [Sampling the images...]'
                feed_dict = {self.images_A: images_A,
                             self.images_B: images_B,
                             self.code: runtime_z,
                             self.is_training: False
                             }
                if self.opts.model == 'bicycle':
-                  images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
                   images_clr  = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
                   utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}_cLR'.format(iteration)),
+                          self.opts.sample_dir, '{}'.format(iteration)),
                           images_clr, inv_normalize=True)
-                  utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}_cVAE'.format(iteration)),
-                          images_cvae, inv_normalize=True)
 
                   debug_summaries = self.debug_summaries.eval(session=self.sess,
                                                               feed_dict=feed_dict)

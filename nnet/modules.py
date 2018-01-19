@@ -355,7 +355,7 @@ def conv_bn_relu(input, ksize, out_channels, is_training, stride=1,
    Returns:
       Tensor after the series of operations
    """
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       conv_ac = conv2d(input, ksize, out_channels, stride, name, reuse)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
       conv_rl = relu(conv_bn)
@@ -382,7 +382,7 @@ def conv_bn_lrelu(input, ksize, out_channels, is_training, stride=1,
    Returns:
       Tensor after the series of operations
    """
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       conv_ac = conv2d(input, ksize, out_channels, stride, name, reuse)
       conv_bn = batch_normalize(conv_ac, is_training, reuse=reuse)
       conv_rl = lrelu(conv_bn)
@@ -409,7 +409,7 @@ def bn_relu_conv(input, ksize, out_channels, is_training, stride=1,
    Returns:
       Tensor after the series of operations
    """
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       conv_bn = batch_normalize(input, is_training, reuse=reuse)
       conv_rl = relu(conv_bn)
       conv_ac = conv2d(conv_rl, ksize, out_channels, stride, name, reuse)
@@ -436,7 +436,7 @@ def bn_lrelu_conv(input, ksize, out_channels, is_training, stride=1,
    Returns:
       Tensor after the series of operations
    """
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       conv_bn = batch_normalize(input, is_training, reuse=reuse)
       conv_rl = lrelu(conv_bn)
       conv_ac = conv2d(conv_rl, ksize, out_channels, stride, name, reuse)
@@ -465,7 +465,7 @@ def dconv_bn_relu(input, ksize, out_channels, out_shape, is_training,
    Returns:
       Tensor after the series of operations
    """
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       conv_ac = deconv(input, ksize=ksize, out_shape=out_shape,
                        out_channels=out_channels, stride=stride,
                        name=name, reuse=reuse, batch_size=batch_size)
@@ -496,7 +496,7 @@ def dconv_bn_lrelu(input, ksize, out_channels, out_shape, is_training,
    Returns:
       Tensor after the series of operations
    """
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       conv_ac = deconv(input, ksize=ksize, out_shape=out_shape,
                        out_channels=out_channels, stride=stride,
                        name=name, reuse=reuse, batch_size=batch_size)
@@ -560,7 +560,7 @@ def residual_block_v1(input, out_channels, is_training, stride=1,
       name = "residual_block"
    assert(len(out_channels) == 3), "Must specify input channels for each block"
 
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
       shortcut, short_bn = None, None
       input_channels = input.get_shape().as_list()[-1]
 
@@ -615,7 +615,7 @@ def residual_block_v2(input, out_channels, is_training, stride=1,
       name = "residual_block"
    assert(len(out_channels) == 2), "Must specify input channels for each block"
 
-   with tf.variable_scope(name+'_block', reuse=reuse):
+   with tf.variable_scope(name, reuse=reuse):
 
       # Shortcut
       with tf.variable_scope('shortcut'):
