@@ -27,6 +27,7 @@ tf.app.flags.DEFINE_boolean('load_images', False, """Load images before run time
 # Training
 tf.app.flags.DEFINE_string('direction', "a2b", """a2b or b2a""")
 tf.app.flags.DEFINE_integer('batch_size', 1, """Batch size""")
+tf.app.flags.DEFINE_integer('g_update', 1, """update G this many times for one update of D""")
 tf.app.flags.DEFINE_integer('max_epochs', 1000, """Max iterations for training""")
 tf.app.flags.DEFINE_integer('ckpt_frq', 100, """Epoch frequency at which to checkpoint the model""")
 tf.app.flags.DEFINE_integer('gen_frq', 100, """Iteration frequency at which images are generated""")

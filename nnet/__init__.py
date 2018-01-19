@@ -62,11 +62,13 @@ class Model(object):
          self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
                                   self.opts.g_kernels, self.opts.g_nonlin,
                                   norm=self.opts.g_norm)
+         print 'here'
          self.E_mean, self.E_std  = self.encoder(self.G, self.opts.e_layers, self.opts.e_kernels,
                                                  self.opts.e_nonlin, norm=self.opts.e_norm,
                                                  num_blocks=self.opts.e_blocks, reuse=False)
       elif self.opts.model == 'bicycle':
          # cVAE-GAN graph
+         print ' - Generating cVAE-GAN graph...'
          self.E_mean_1, self.E_std_1  = self.encoder(self.target_images, self.opts.e_layers,
                                                      self.opts.e_kernels, self.opts.e_nonlin,
                                                      norm=self.opts.e_norm, reuse=False,
@@ -78,6 +80,7 @@ class Model(object):
                                       norm=self.opts.g_norm)
 
          # cLR-GAN graph
+         print ' - Generating cLR-GAN graph...'
          self.G_clr = self.generator(self.input_images, self.code, self.opts.g_layers,
                                      self.opts.g_kernels, self.opts.g_nonlin,
                                      norm=self.opts.g_norm, reuse=True)
@@ -347,21 +350,21 @@ class Model(object):
                  non_lin=self.non_lin[non_lin], reuse=reuse)
            else:
               self.g_layers['conv{}_0'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-                 out_channels=kernels*factor, is_training=self.is_training, stride=1,
-                 name='conv0{}'.format(idx), reuse=reuse)
+                 out_channels=kernels*factor, is_training=self.is_training, stride=2,
+                 name='conv0', reuse=reuse)
               in_layer = self.g_layers['conv{}_0'.format(idx)]
-              self.g_layers['conv{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-                 out_channels=kernels*factor, is_training=self.is_training, stride=1,
-                 name='conv1{}'.format(idx), reuse=reuse, )
-              if idx < layers-1:
-                in_layer = self.g_layers['conv{}_1'.format(idx)]
-                self.g_layers['pool{}'.format(idx)] = max_pool(in_layer)
+              # self.g_layers['conv{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
+              #    out_channels=kernels*factor, is_training=self.is_training, stride=1,
+              #    name='conv1', reuse=reuse, )
+              # if idx < layers-1:
+              #   in_layer = self.g_layers['conv{}_1'.format(idx)]
+              #   self.g_layers['pool{}'.format(idx)] = max_pool(in_layer)
            if not self.opts.full_summaries:
               activation_summary(self.g_layers['conv{}'.format(idx)])
-           try:
-              in_layer = self.g_layers['pool{}'.format(idx)]
-           except:
-              pass
+           # try:
+           #    in_layer = self.g_layers['pool{}'.format(idx)]
+           # except:
+           #    pass
 
       # Upsampling
       in_layer = self.g_layers['conv{}_1'.format(layers-1)]
@@ -386,11 +389,11 @@ class Model(object):
            # Convolutions
            self.g_layers['convT{}_0'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
               out_channels=kernels*factor, is_training=self.is_training, stride=1,
-              name='convT0{}'.format(idx), reuse=reuse)
+              name='conv0', reuse=reuse)
            in_layer = self.g_layers['convT{}_0'.format(idx)]
            self.g_layers['convT{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
               out_channels=kernels*factor, is_training=self.is_training, stride=1,
-              name='convT1{}'.format(idx), reuse=reuse)
+              name='conv1', reuse=reuse)
            
            in_layer = self.g_layers['convT{}_1'.format(idx)]
            new_idx += 1
@@ -678,8 +681,8 @@ class Model(object):
                          self.is_training: True
                         }
             for i in xrange(self.opts.g_update):
-              _, g_summaries, act_summaries, g_loss = self.sess.run(
-                      [self.GE_opt, self.g_summaries, self.act_sparsity,
+              _, g_summaries, g_loss = self.sess.run(
+                      [self.GE_opt, self.g_summaries,
                        self.g_loss], feed_dict=feed_dict)
               self.writer.add_summary(g_summaries, iteration)
 
@@ -734,13 +737,6 @@ class Model(object):
       self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir,
                                           graph=self.sess.graph)
 
-   def validate(self, iteration):
-      """Method to validate the model by sampling images at test time
-
-      Args:
-         iteration: Iteration number during training mode
-      """
-
    def test(self, source):
       """Test the model
 
@@ -750,12 +746,38 @@ class Model(object):
       Returns:
          The generated image conditioned on the input image
       """
+      split_len = 600 if self.opts.dataset == 'maps' else 256
       try:
          img = utils.imread(source)
+         img_A = img[:, :split_len, :]
+         img_B = img[:, split_len:, :]
+         if self.opts.direction == 'b2a':
+            input_images = img_B
+            target_images = img_A
+         else:
+            input_images = img_A
+            target_images = img_B
       except IOError:
          image_paths = os.listdir(source)
 
       latest_ckpt = tf.train.latest_checkpoint(self.opts.ckpt_dir)
       self.saver.restore(self.sess, latest_ckpt)
+      utils.imwrite(os.path.join(
+              self.opts.sample_dir, '../ground_truth'),
+              target_images, inv_normalize=False)
 
-      # TODO: Complete the forward pass and saving the images
+      for idx in xrange(5):
+        code = np.random.uniform(low=-1.0,
+                                 high=1.0,
+                                 size=[1,
+                                       self.opts.code_len]).astype(np.float32)
+        feed_dict = {
+          self.is_training: False,
+          self.images_A: img_A,
+          self.images_B: img_B,
+          self.code: code
+        }
+        images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+        utils.imwrite(os.path.join(
+                self.opts.sample_dir, 'test_{}'.format(idx)),
+                images, inv_normalize=True)
