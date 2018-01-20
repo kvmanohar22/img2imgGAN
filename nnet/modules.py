@@ -660,6 +660,15 @@ def add_layers(layer_1, layer_2, name=None):
    with tf.variable_scope(name):
       return tf.add(layer_1, layer_2)
 
+
+def concatenate(layer_1, layer_2, axis, name=None):
+   if name is None:
+      name = 'concat'
+
+   with tf.variable_scope(name):
+      return tf.concat([layer_1, layer_2], axis=axis)
+
+
 def activation_summary(tensor, collection='hist_spar'):
    """Write the summary of a tensor
 
