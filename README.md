@@ -6,7 +6,7 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 - Summary of the paper: [Gist](short_notes.md)
 
 
-Contents:
+# Contents:
   - [Tensorboard Visualization of models](#tensorboard)
     - [cVAE-GAN](#cvae)
     - [cLR-GAN](#clr)
@@ -16,7 +16,7 @@ Contents:
   - [Setup](#setup)
   - [Usage](#usage)
     - [Generate Graph](#graph)
-    - [Training the networ](#train)
+    - [Training the network](#train)
     - [Testing the network](#test)
   - [TODO](#todo)
   - [Licence](#licence)
