@@ -108,7 +108,7 @@ class Model(object):
       self.model_loss()
       self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
       self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
-      self.summaries()
+      # self.summaries()
 
    def allocate_placeholders(self):
       """Allocate placeholders of the graph
@@ -126,7 +126,6 @@ class Model(object):
          self.target_images = self.images_A
       else:
          raise ValueError("There is no such image transition type")
-
 
    def assign_gen_code(self):
       """Assigns the noise for the generator
@@ -154,7 +153,6 @@ class Model(object):
                                         name='Noise')
          assert self.gen_input_noise is not None, "Generator input noise is not fed"
 
-
    def summaries(self):
       """Adds all the necessary summaries
       """
@@ -166,10 +164,6 @@ class Model(object):
          gen_images = [gen_images_clr, gen_images_cvae]
       else:
          gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
-
-      # Just to visualize how images are generated
-      self.gen_images_cvae_sample = tf.summary.image('Gen_images_cVAE_sample', self.G_cvae, max_outputs=10)
-      self.gen_images_clr_sample  = tf.summary.image('Gen_images_cLR_sample', self.G_clr, max_outputs=10)
 
       # Loss
       z_summary = tf.summary.histogram('z', self.code)
@@ -191,7 +185,6 @@ class Model(object):
         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
       except:
         pass
-
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
                reuse=False, num_blocks=4):
@@ -219,7 +212,6 @@ class Model(object):
                kernels=kernels, non_lin=non_lin, num_blocks=num_blocks, reuse=reuse)
          else:
             raise ValueError("No such type of encoder exists!")
-
 
    def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='lrelu',
                       norm=None, reuse=False):
@@ -263,7 +255,6 @@ class Model(object):
          activation_summary(self.e_layers['full_logvar'])
 
       return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
-
 
    def resnet_encoder(self, image, num_layers=4, num_blocks=4, output_neurons=1,
                       kernels=64, non_lin='relu', norm=None, reuse=False):
@@ -368,8 +359,6 @@ class Model(object):
       with tf.variable_scope('up_1'):
         dcnv1 = deconv(conv5, ksize=3, out_channels=512, stride=2, name='dconv1', out_shape=32, non_lin=self.non_lin[non_lin],
                        batch_size=self.opts.batch_size, reuse=reuse)
-        # h, w = conv4.get_shape().as_list()[1], conv4.get_shape().as_list()[2]
-        # sliced = tf.slice(conv4, [0, h//2, w//2, 0], [0, h//2, w//2, 0], name='slice1')
         up1   = concatenate(dcnv1, conv4, axis=3)
         conv6 = conv2d(up1,   ksize=3, out_channels=256, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
         conv6 = conv2d(conv6, ksize=3, out_channels=256, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
@@ -377,8 +366,6 @@ class Model(object):
       with tf.variable_scope('up_2'):
         dcnv2 = deconv(conv6, ksize=3, out_channels=256, stride=2, name='dconv1', out_shape=64, non_lin=self.non_lin[non_lin],
                        batch_size=self.opts.batch_size, reuse=reuse)
-        # h, w = conv3.get_shape().as_list()[1], conv3.get_shape().as_list()[2]
-        # sliced = tf.slice(conv3, [0, h//2, w//2, 0], [0, h//2, w//2, 0], name='slice1')
         up2   = concatenate(dcnv2, conv3, axis=3)
         conv7 = conv2d(up2,   ksize=3, out_channels=128, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
         conv7 = conv2d(conv7, ksize=3, out_channels=128, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
@@ -386,8 +373,6 @@ class Model(object):
       with tf.variable_scope('up_3'):
         dcnv3 = deconv(conv7, ksize=3, out_channels=128, stride=2, name='dconv1', out_shape=128, non_lin=self.non_lin[non_lin],
                        batch_size=self.opts.batch_size, reuse=reuse)
-        # h, w = conv2.get_shape().as_list()[1], conv2.get_shape().as_list()[2]
-        # sliced = tf.slice(conv2, [0, h//2, w//2, 0], [0, h//2, w//2, 0], name='slice1')
         up2   = concatenate(dcnv3, conv2, axis=3)
         conv8 = conv2d(up2,   ksize=3, out_channels=64, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
         conv8 = conv2d(conv8, ksize=3, out_channels=64, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
@@ -395,8 +380,6 @@ class Model(object):
       with tf.variable_scope('up_4'):
         dcnv4 = deconv(conv8, ksize=3, out_channels=64, stride=2, name='dconv1', out_shape=256, non_lin=self.non_lin[non_lin],
                        batch_size=self.opts.batch_size, reuse=reuse)
-        # h, w = conv1.get_shape().as_list()[1], conv1.get_shape().as_list()[2]
-        # sliced = tf.slice(conv1, [0, h//2, w//2, 0], [0, h//2, w//2, 0], name='slice1')
         up3   = concatenate(dcnv4, conv1, axis=3)
         conv9 = conv2d(up3,   ksize=3, out_channels=32, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
         conv9 = conv2d(conv9, ksize=3, out_channels=32, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
@@ -405,48 +388,6 @@ class Model(object):
         output = conv2d(conv9, ksize=3, out_channels=3, stride=1, name='conv1', non_lin=self.non_lin['tanh'], reuse=reuse)
 
       return output
-      # # Downsampling
-      # for idx in xrange(layers):
-      #    factor = min(2**idx, 4)
-      #    if not norm:
-      #       self.g_layers['conv{}'.format(idx)] = conv2d(in_layer, ksize=k, 
-      #          out_channels=kernels*factor, stride=s, name='conv{}'.format(idx),
-      #          non_lin=self.non_lin[non_lin], reuse=reuse)
-      #    else:
-      #       self.g_layers['conv{}'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-      #          out_channels=kernels*factor, is_training=self.is_training, stride=s,
-      #          name='conv{}'.format(idx), reuse=reuse)
-      #    if not self.opts.full_summaries:
-      #       activation_summary(self.g_layers['conv{}'.format(idx)])
-      #    in_layer = self.g_layers['conv{}'.format(idx)]
-
-      # # Upsampling
-      # in_layer = self.g_layers['conv{}'.format(layers-1)]
-      # new_idx = layers
-      # for idx in xrange(layers-2, -1, -1):
-      #    input_shape = self.g_layers['conv{}'.format(idx)].get_shape().as_list()
-      #    out_shape = input_shape[1]
-      #    out_channels = input_shape[-1]
-      #    self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
-      #       out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-      #       non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
-      #    if not self.opts.full_summaries:
-      #       activation_summary(self.g_layers['deconv{}'.format(new_idx)])
-
-      #    input_layer = self.g_layers['deconv{}'.format(new_idx)]
-      #    self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
-      #       self.g_layers['conv{}'.format(idx)])
-      #    in_layer = self.g_layers['deconv{}_add'.format(new_idx)]
-      #    new_idx += 1
-
-      # self.g_layers['deconv{}'.format(layers*2-1)] = deconv(self.g_layers['deconv{}_add'.format(new_idx-1)],
-      #    ksize=k, out_shape=self.h, out_channels=3, name='deconv{}'.format(new_idx),
-      #    non_lin=self.non_lin['tanh'], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
-      # if not self.opts.full_summaries:
-      #    activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
-
-      # return self.g_layers['deconv{}'.format(layers*2-1)]
-
 
    def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
                      reuse=False):
@@ -767,11 +708,15 @@ class Model(object):
                   #                                             feed_dict=feed_dict)
                   # self.writer.add_summary(debug_summaries, iteration)
 
+               elif self.opts.model == 'cvae-gan':
+                  images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+               elif self.opts.model == 'clr-gan':
+                  images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
                else:
-                  images = self.G.eval(session=self.sess, feed_dict=feed_dict)
-                  utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}'.format(iteration)),
-                          images, inv_normalize=True)
+                  raise ValueError("No such type of model exists")
+               utils.imwrite(os.path.join(
+                       self.opts.sample_dir, 'iter_{}'.format(iteration)),
+                       images, inv_normalize=True)
 
             batch_num += 1
 
