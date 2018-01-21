@@ -171,10 +171,6 @@ class Model(object):
       else:
          gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
 
-      # Just to visualize how images are generated
-      self.gen_images_cvae_sample = tf.summary.image('Gen_images_cVAE_sample', self.G_cvae, max_outputs=10)
-      self.gen_images_clr_sample  = tf.summary.image('Gen_images_cLR_sample', self.G_clr, max_outputs=10)
-
       # Loss
       z_summary = tf.summary.histogram('z', self.code)
       d_loss_fake = tf.summary.scalar('D_loss_fake', self.loss['D_fake_loss'])
@@ -183,10 +179,13 @@ class Model(object):
       g_loss = tf.summary.scalar('G_loss', self.g_loss)
       self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
       if self.opts.model == 'bicycle':
-         self.g_summaries = tf.summary.merge([g_loss])#, images_A, images_B]+gen_images)
+         self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+gen_images)
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
-      self.debug_summaries = tf.summary.merge([self.gen_images_clr_sample, self.gen_images_cvae_sample])
+
+      if not self.opts.full_summaries:
+         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
+
       try:
         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
       except:
@@ -219,7 +218,6 @@ class Model(object):
                kernels=kernels, non_lin=non_lin, num_blocks=num_blocks, reuse=reuse)
          else:
             raise ValueError("No such type of encoder exists!")
-
 
    def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='lrelu',
                       norm=None, reuse=False):
@@ -264,7 +262,6 @@ class Model(object):
 
       return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
 
-
    def resnet_encoder(self, image, num_layers=4, num_blocks=4, output_neurons=1,
                       kernels=64, non_lin='relu', norm=None, reuse=False):
       """Residual Network with several residual blocks
@@ -301,6 +298,7 @@ class Model(object):
 
       return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
 
+
    def generator(self, image, z, layers=3, kernels=64, non_lin='relu', norm=None,
                  reuse=False):
       """Generator graph of GAN
@@ -328,7 +326,8 @@ class Model(object):
          else:
             raise ValueError("No such type of generator exists!")
 
-   def generator_input(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
+
+   def generator_input(self, image, z, layers=3, kernels=32, non_lin='lrelu', norm=None,
                        reuse=False):
       """Generator graph where noise is concatenated to the first layer
       """
@@ -340,73 +339,63 @@ class Model(object):
       k, s = 4, 2
       factor = 1
 
-      # Downsampling
-      for idx in xrange(layers):
-         factor = min(2**idx, 4)
-         with tf.variable_scope('down_{}'.format(idx+1)):
-           if not norm:
-              self.g_layers['conv{}_0'.format(idx)] = conv2d(in_layer, ksize=k, 
-                 out_channels=kernels*factor, stride=1, name='conv{}'.format(idx),
-                 non_lin=self.non_lin[non_lin], reuse=reuse)
-           else:
-              self.g_layers['conv{}_0'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-                 out_channels=kernels*factor, is_training=self.is_training, stride=2,
-                 name='conv0', reuse=reuse)
-              in_layer = self.g_layers['conv{}_0'.format(idx)]
-              # self.g_layers['conv{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-              #    out_channels=kernels*factor, is_training=self.is_training, stride=1,
-              #    name='conv1', reuse=reuse, )
-              # if idx < layers-1:
-              #   in_layer = self.g_layers['conv{}_1'.format(idx)]
-              #   self.g_layers['pool{}'.format(idx)] = max_pool(in_layer)
-           if not self.opts.full_summaries:
-              activation_summary(self.g_layers['conv{}'.format(idx)])
-           # try:
-           #    in_layer = self.g_layers['pool{}'.format(idx)]
-           # except:
-           #    pass
+      with tf.variable_scope('down_1'):
+        conv1 = conv2d(in_layer, ksize=3, out_channels=32, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv1 = conv2d(conv1,    ksize=3, out_channels=32, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+        pool1 = max_pool(conv1, kernel=2, stride=2, name='pool1')
+      
+      with tf.variable_scope('down_2'):
+        conv2 = conv2d(pool1, ksize=3, out_channels=64, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv2 = conv2d(conv2, ksize=3, out_channels=64, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+        pool2 = max_pool(conv2, kernel=2, stride=2, name='pool1')
 
-      # Upsampling
-      in_layer = self.g_layers['conv{}_1'.format(layers-1)]
-      new_idx, up_idx = layers, 1
-      for idx in xrange(layers-2, -1, -1):
-         factor = min(2**(idx), 4)
-         with tf.variable_scope('up_{}'.format(up_idx)):
-           # Deconv
-           input_shape = self.g_layers['conv{}_1'.format(idx)].get_shape().as_list()
-           out_shape = input_shape[1]
-           out_channels = input_shape[-1]
-           self.g_layers['deconv{}'.format(new_idx)] = deconv(in_layer, ksize=k,
-              out_shape=out_shape, out_channels=out_channels, name='deconv{}'.format(new_idx),
-              non_lin=self.non_lin[non_lin], batch_size=self.opts.batch_size, stride=s, reuse=reuse)
-           if not self.opts.full_summaries:
-              activation_summary(self.g_layers['deconv{}'.format(new_idx)])
-           # Add layers
-           input_layer = self.g_layers['deconv{}'.format(new_idx)]
-           self.g_layers['deconv{}_add'.format(new_idx)] = add_layers(input_layer,
-              self.g_layers['conv{}_1'.format(idx)])
-           in_layer = self.g_layers['deconv{}_add'.format(new_idx)]
-           # Convolutions
-           self.g_layers['convT{}_0'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-              out_channels=kernels*factor, is_training=self.is_training, stride=1,
-              name='conv0', reuse=reuse)
-           in_layer = self.g_layers['convT{}_0'.format(idx)]
-           self.g_layers['convT{}_1'.format(idx)] = conv_bn_relu(in_layer, ksize=k, 
-              out_channels=kernels*factor, is_training=self.is_training, stride=1,
-              name='conv1', reuse=reuse)
-           
-           in_layer = self.g_layers['convT{}_1'.format(idx)]
-           new_idx += 1
-           up_idx += 1
+      with tf.variable_scope('down_3'):
+        conv3 = conv2d(pool2, ksize=3, out_channels=128, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv3 = conv2d(conv3, ksize=3, out_channels=128, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+        pool3 = max_pool(conv3, kernel=2, stride=2, name='pool1')
 
-      in_layer = self.g_layers['convT0_1']
-      self.g_layers['deconv{}'.format(layers*2-1)] = conv2d(in_layer,
-         ksize=k, out_channels=3, name='output', non_lin=self.non_lin['tanh'],
-         stride=1, reuse=reuse)
-      if not self.opts.full_summaries:
-         activation_summary(self.g_layers['deconv{}'.format(layers*2-1)])
+      with tf.variable_scope('down_4'):
+        conv4 = conv2d(pool3, ksize=3, out_channels=256, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv4 = conv2d(conv4, ksize=3, out_channels=256, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+        pool4 = max_pool(conv4, kernel=2, stride=2, name='pool1')
 
-      return self.g_layers['deconv{}'.format(layers*2-1)]
+      with tf.variable_scope('down_5'):
+        conv5  = conv2d(pool4, ksize=3, out_channels=512, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv5 = conv2d(conv5,  ksize=3, out_channels=512, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+
+      with tf.variable_scope('up_1'):
+        dcnv1 = deconv(conv5, ksize=3, out_channels=512, stride=2, name='dconv1', out_shape=32, non_lin=self.non_lin[non_lin],
+                       batch_size=self.opts.batch_size, reuse=reuse)
+        up1   = concatenate(dcnv1, conv4, axis=3)
+        conv6 = conv2d(up1,   ksize=3, out_channels=256, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv6 = conv2d(conv6, ksize=3, out_channels=256, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+
+      with tf.variable_scope('up_2'):
+        dcnv2 = deconv(conv6, ksize=3, out_channels=256, stride=2, name='dconv1', out_shape=64, non_lin=self.non_lin[non_lin],
+                       batch_size=self.opts.batch_size, reuse=reuse)
+        up2   = concatenate(dcnv2, conv3, axis=3)
+        conv7 = conv2d(up2,   ksize=3, out_channels=128, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv7 = conv2d(conv7, ksize=3, out_channels=128, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+
+      with tf.variable_scope('up_3'):
+        dcnv3 = deconv(conv7, ksize=3, out_channels=128, stride=2, name='dconv1', out_shape=128, non_lin=self.non_lin[non_lin],
+                       batch_size=self.opts.batch_size, reuse=reuse)
+        up2   = concatenate(dcnv3, conv2, axis=3)
+        conv8 = conv2d(up2,   ksize=3, out_channels=64, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv8 = conv2d(conv8, ksize=3, out_channels=64, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+
+      with tf.variable_scope('up_4'):
+        dcnv4 = deconv(conv8, ksize=3, out_channels=64, stride=2, name='dconv1', out_shape=256, non_lin=self.non_lin[non_lin],
+                       batch_size=self.opts.batch_size, reuse=reuse)
+        up3   = concatenate(dcnv4, conv1, axis=3)
+        conv9 = conv2d(up3,   ksize=3, out_channels=32, stride=1, name='conv1', non_lin=self.non_lin[non_lin], reuse=reuse)
+        conv9 = conv2d(conv9, ksize=3, out_channels=32, stride=1, name='conv2', non_lin=self.non_lin[non_lin], reuse=reuse)
+
+      with tf.variable_scope('up_5'):
+        output = conv2d(conv9, ksize=3, out_channels=3, stride=1, name='conv1', non_lin=self.non_lin['tanh'], reuse=reuse)
+
+      return output
+
 
    def generator_all(self, image, z, layers=3, kernels=64, non_lin='lrelu', norm=None,
                      reuse=False):
@@ -447,6 +436,7 @@ class Model(object):
          else:
             raise NotImplementedError("Multiple discriminators is not implemented")
 
+
    def discriminator_patch(self, image, kernels, num_layers, norm_layer, non_lin,
                            use_sigmoid=False, reuse=False, norm=None):
       """PatchGAN discriminator
@@ -483,6 +473,7 @@ class Model(object):
 
       logits = self.d_layers['conv{}'.format(num_layers+1)]
       return sigmoid(logits), logits
+
 
    def model_loss(self):
       """Implements the loss graph
@@ -666,8 +657,8 @@ class Model(object):
                          self.code: code,
                          self.is_training: True
                         }
-            _, d_summaries, d_loss, d_fake, d_real = self.sess.run(
-                    [self.D_opt, self.d_summaries, self.d_loss,
+            _, d_loss, d_summaries, d_fake, d_real = self.sess.run(
+                    [self.D_opt, self.d_loss, self.d_summaries,
                      self.loss['D_fake_loss'],
                      self.loss['D_real_loss']
                      ],
@@ -680,11 +671,13 @@ class Model(object):
                          self.code: code,
                          self.is_training: True
                         }
+
             for i in xrange(self.opts.g_update):
               _, g_summaries, g_loss = self.sess.run(
                       [self.GE_opt, self.g_summaries,
                        self.g_loss], feed_dict=feed_dict)
               self.writer.add_summary(g_summaries, iteration)
+              self.writer.add_summary(sparsity_sum, iteration)
 
             elapsed_time = datetime.now() - start_time
             print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
@@ -701,26 +694,32 @@ class Model(object):
                             self.is_training: False
                             }
                if self.opts.model == 'bicycle':
+                  images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
                   images_clr  = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
                   utils.imwrite(os.path.join(
-                          self.opts.sample_dir, '{}'.format(iteration)),
+                          self.opts.sample_dir, 'iter_{}_cLR'.format(iteration)),
                           images_clr, inv_normalize=True)
-
-                  debug_summaries = self.debug_summaries.eval(session=self.sess,
-                                                              feed_dict=feed_dict)
-                  self.writer.add_summary(debug_summaries, iteration)
-
-               else:
-                  images = self.G.eval(session=self.sess, feed_dict=feed_dict)
                   utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}'.format(iteration)),
-                          images, inv_normalize=True)
+                          self.opts.sample_dir, 'iter_{}_cVAE'.format(iteration)),
+                          images_cvae, inv_normalize=True)
+               elif self.opts.model == 'cvae-gan':
+                  images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+               elif self.opts.model == 'clr-gan':
+                  images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+               else:
+                  raise ValueError("No such type of model exists")
+
+               if self.opts.model is not 'bicycle':
+                 utils.imwrite(os.path.join(
+                         self.opts.sample_dir, 'iter_{}'.format(iteration)),
+                         images, inv_normalize=True)
 
             batch_num += 1
 
          if np.mod(epoch, self.opts.ckpt_frq) == 0:
             self.checkpoint(epoch)
       self.sess.close()
+
 
    def checkpoint(self, epoch):
       """Creates a checkpoint at the given epoch
@@ -730,12 +729,14 @@ class Model(object):
       """
       self.saver.save(self.sess, os.path.join(self.opts.summary_dir, "model_{}.ckpt").format(epoch))
 
+
    def test_graph(self):
       """Generate the graph and check if the connections are correct
       """
       sys.stdout.write(' - Generating the test graph...\n')
       self.writer = tf.summary.FileWriter(logdir=self.opts.summary_dir,
                                           graph=self.sess.graph)
+
 
    def test(self, source):
       """Test the model
@@ -747,26 +748,26 @@ class Model(object):
          The generated image conditioned on the input image
       """
       split_len = 600 if self.opts.dataset == 'maps' else 256
-      try:
-         img = utils.imread(source)
-         img_A = img[:, :split_len, :]
-         img_B = img[:, split_len:, :]
-         if self.opts.direction == 'b2a':
-            input_images = img_B
-            target_images = img_A
-         else:
-            input_images = img_A
-            target_images = img_B
-      except IOError:
-         image_paths = os.listdir(source)
 
-      latest_ckpt = tf.train.latest_checkpoint(self.opts.ckpt_dir)
-      self.saver.restore(self.sess, latest_ckpt)
+      img = utils.imread(source)
+      img_A = img[:, :split_len, :]
+      img_B = img[:, split_len:, :]
+      if self.opts.direction == 'b2a':
+        input_images = img_B
+        target_images = img_A
+      else:
+        input_images = img_A
+        target_images = img_B
+
+      try:
+        self.saver.restore(self.sess, self.opts.ckpt)
+      except:
+        raise ValueError("Couldn't restore the model from the checkpoint: {}".format(self.opts.ckpt))
       utils.imwrite(os.path.join(
-              self.opts.sample_dir, '../ground_truth'),
+              self.opts.sample_dir, '../target_images'),
               target_images, inv_normalize=False)
 
-      for idx in xrange(5):
+      for idx in xrange(self.opts.sample_num):
         code = np.random.uniform(low=-1.0,
                                  high=1.0,
                                  size=[1,
@@ -777,7 +778,11 @@ class Model(object):
           self.images_B: img_B,
           self.code: code
         }
-        images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
-        utils.imwrite(os.path.join(
-                self.opts.sample_dir, 'test_{}'.format(idx)),
-                images, inv_normalize=True)
+        if self.opts.model == 'bicycle':
+          images = self.G_vae.eval(session=self.sess, feed_dict=feed_dict)
+          images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+          utils.imwrite(os.path.join(
+                  self.opts.sample_dir, '../test_{}'.format(idx)),
+                  images, inv_normalize=True)
+        else:
+          raise ValueError("Testing only possible for bicycleGAN")

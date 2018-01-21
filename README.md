@@ -2,11 +2,28 @@
 Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 
 - Link to the paper : [arXiv:1711.11586](https://arxiv.org/abs/1711.11586)
-- PyTorch implementation: [Link]()
-- Summary of the paper: [Gist]()
+- PyTorch implementation: [Link](https://github.com/junyanz/BicycleGAN)
+- Summary of the paper: [Gist](short_notes.md)
 
 
-## BicycleGAN
+Contents:
+  - [Tensorboard Visualization of models](#tensorboard)
+    - [cVAE-GAN](#cvae)
+    - [cLR-GAN](#clr)
+    - [Bicycle-GAN](#bicycle)
+  - [Dependencies](#depends)
+  - [Structure](#struct)
+  - [Setup](#setup)
+  - [Usage](#usage)
+    - [Generate Graph](#graph)
+    - [Training the networ](#train)
+    - [Testing the network](#test)
+  - [TODO](#todo)
+  - [Licence](#licence)
+
+
+<a name='tensorboard'></a>
+# Model Architecture Visualization
 
 - Network
 
@@ -15,9 +32,23 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 
 - Tensorboard visualization of the entire network
 
-![](imgs/tensorboard.gif)
+<a name='cvae'></a>
+### cVAE-GAN Network
 
-## Dependencies
+![](imgs/cvae-gan.gif)
+
+<a name='clr'></a>
+### cLR-GAN Network
+
+![](imgs/clr-gan.gif)
+
+<a name='bicycle'></a>
+### Bicycle Network
+
+![](imgs/bicycle.gif)
+
+<a name='depends'></a>
+# Dependencies
 
 - tensorflow (1.4.0)
 - numpy (1.13.3)
@@ -30,7 +61,8 @@ To install the above dependencies, run:
 $ sudo pip install -r requirements.txt
 ```
 
-## Structure
+<a name='struct'></a>
+# Structure
 
 ```
  -img2imgGAN/
@@ -43,7 +75,8 @@ $ sudo pip install -r requirements.txt
                   -maps
 ```
 
-## Setup
+<a name='setup'></a>
+# Setup
 
 - Download the datasets from the following links
    - [edges2handbags]()
@@ -66,8 +99,10 @@ $ sudo pip install -r requirements.txt
   $ bash setup_dataset.sh
   ```
 
-## Usage
+<a name='usage'></a>
+# Usage
 
+<a name='graph'></a>
 - Generating graph:
 
   To visualize the connections between the graph nodes, we can
@@ -95,6 +130,7 @@ $ sudo pip install -r requirements.txt
   $ python main.py --help
   ```
 
+<a name='train'></a>
 - Training the network
 
   To train `model` (say `cvae-gan`) on `dataset` (say `facades`) from scratch,
@@ -113,6 +149,7 @@ $ sudo pip install -r requirements.txt
   $ python main.py --resume <path_to_checkpoint> --model cvae-gan
   ```
 
+<a name='test'></a>
 - Testing the network
 
   To test the model from the given trained models,
@@ -120,10 +157,13 @@ $ sudo pip install -r requirements.txt
   $ python main.py --test --model cvae-gan --ckpt <path/to/ckpt> --test_source <path/to/img/dir>
   ```
 
-## TODO
+<a name='todo'></a>
+# TODO
 - [x] Residual Encoder
 - [ ] Multiple discriminators for `cVAE-GAN` and `cLR-GAN`
+- [ ] Inducing noise to all the layers of the generator
 
-## License
+<a name='licence'></a>
+# License
 
 Released under [the MIT license](LICENSE)
