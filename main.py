@@ -15,6 +15,11 @@ def main(_):
    Args:
       _ : Tensorflow flags app instance
    """
+   if FLAGS.create != "":
+      dataset = utils.Dataset(FLAGS)
+      dataset.create_records(FLAGS.create)
+      exit()
+
    priliminary_checks(FLAGS)
    idx = get_runid(FLAGS)
    create_rundirs(FLAGS, idx)
@@ -27,15 +32,11 @@ def main(_):
       net.test_graph()
       exit()
 
-   if FLAGS.create != "":
-      dataset = utils.Dataset(FLAGS)
-      dataset.create_records(FLAGS.create)
-      exit()
 
    FLAGS.h = 600 if FLAGS.dataset == 'maps' else 256
    FLAGS.w = FLAGS.h
 
-   if FLAGS.train:
+   if FLAGS.train or FLAGS.resume:
       net = nnet.Model(FLAGS, is_training=True)
       net.train()
       print ' - Done training the network...'
