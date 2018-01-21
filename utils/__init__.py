@@ -30,12 +30,18 @@ class Dataset(object):
       self.check_records()
       if load:
          if opts.load_images:
-            raise NotImplementedError("Cannot load images before runtime")
+            print ' - Loading numpy raw images...'
+            begin_time = time.time()
+            self.t_images_data = np.load(os.path.join(opts.dataset_dir,
+                                                      opts.dataset,
+                                                      'train.npy'))
+            print ' - Loaded {} images in: {} seconds'.format(len(self.t_images_data)*2,\
+               time.time()-begin_time)
          else:
             self.t_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
-                                 'train.txt'))
+                                 'train.txt'))[:100]
             self.v_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
@@ -53,7 +59,32 @@ class Dataset(object):
       Returns:
          Size of the training dataset
       """
-      return len(self.t_image_paths)
+      try:
+         length = len(self.t_image_paths)
+      except:
+         length = len(self.t_images_data)
+      return length
+
+   def load_val_batch(self):
+      """Loads validation images"""
+
+      img_dim = self.opts.h
+      images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
+      images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
+      for idx, path in enumerate(self.v_image_paths[:self.opts.batch_size]):
+         path = os.path.join(self.opts.dataset_dir, self.opts.dataset, 'val', path)
+         try:
+            image = utils.imread(path)
+            image = utils.normalize_images(images=image)
+         except IOError:
+            raise IOError("Cannot read the image {}" % path)
+
+         split_len = 600 if self.opts.dataset == 'maps' else 256
+         images_A[idx] = image[:, :split_len, :]
+         images_B[idx] = image[:, split_len:, :]
+
+      return images_A, images_B
+      
 
    def load_batch(self, start_idx, end_idx):
       """Loads a batch of data
@@ -66,30 +97,28 @@ class Dataset(object):
          ndarray of images
       """
       if start_idx == 0:
-         np.random.shuffle(self.t_image_paths)
+         try:
+            np.random.shuffle(self.t_image_paths)
+         except:
+            np.random.shuffle(self.t_images_data)
       if self.opts.load_images:
-         raise NotImplementedError("Cannot load images")
+         return self.load_images_from_numpy_records(start_idx, end_idx)
       else:
          return self.load_images_from_files(start_idx, end_idx)
 
-   def load_data(self, dataset=None):
-      """Loads a specific dataset
+   def load_images_from_numpy_records(self, start_idx, end_idx):
+      """Loads images from numpy records
 
       Args:
-         dataset: Name of the dataset
-      """
-      if dataset is None:
-         raise ValueError("Must specify dataset name")
+         start_idx: First index in the list
+         end_idx  : End index in the list
 
-      try:
-         if self.records[dataset]:
-            print 'Loading {} data records...'.format(dataset)
-            self.train_data_in = loader(self.opts.dataset_dir, dataset, 'train_in')
-            self.train_data_out = loader(self.opts.dataset_dir, dataset, 'train_out')
-            self.val_data_in = loader(self.opts.dataset_dir, dataset, 'val_in')
-            self.val_data_out = loader(self.opts.dataset_dir, dataset, 'val_out')
-      except KeyError as E:
-         raise KeyError('Dataset \"{}\" doesnot exist'.format(dataset))
+      Returns:
+         Images as pairs
+      """
+      images_A = utils.normalize_images(self.t_images_data[start_idx:end_idx, 0].astype(np.float32))
+      images_B = utils.normalize_images(self.t_images_data[start_idx:end_idx, 1].astype(np.float32))
+      return images_A, images_B
 
    def load_images_from_files(self, start_idx, end_idx):
       """Loads images by reading images from files
@@ -119,6 +148,25 @@ class Dataset(object):
 
       return images_A, images_B
 
+   def load_data(self, dataset=None):
+      """Loads a specific dataset
+
+      Args:
+         dataset: Name of the dataset
+      """
+      if dataset is None:
+         raise ValueError("Must specify dataset name")
+
+      try:
+         if self.records[dataset]:
+            print 'Loading {} data records...'.format(dataset)
+            self.train_data_in = loader(self.opts.dataset_dir, dataset, 'train_in')
+            self.train_data_out = loader(self.opts.dataset_dir, dataset, 'train_out')
+            self.val_data_in = loader(self.opts.dataset_dir, dataset, 'val_in')
+            self.val_data_out = loader(self.opts.dataset_dir, dataset, 'val_out')
+      except KeyError as E:
+         raise KeyError('Dataset \"{}\" doesnot exist'.format(dataset))
+
    def create_records(self, dataset):
       """Creates numpy records
 
@@ -130,19 +178,17 @@ class Dataset(object):
       test_files = os.listdir(os.path.join(base_path, 'val'))
 
       print 'Creating numpy records for {} train data'.format(dataset)
-      t_data_in, t_data_out, flag = self.create_numpy_records(dataset, train_files, "train")
+      t_data, flag = self.create_numpy_records(dataset, train_files, "train")
       if flag:
          sys.stdout.write('\nSaving the file...\n')
          sys.stdout.flush()
-         self.save_records(dataset, t_data_in, "train_in")
-         self.save_records(dataset, t_data_out, "train_out")
+         self.save_records(dataset, t_data, "train")
       print '\nCreating numpy records for {} validation data'.format(dataset)
-      v_data_in, v_data_out, flag = self.create_numpy_records(dataset, test_files, "val")
+      v_data, flag = self.create_numpy_records(dataset, test_files, "val")
       if flag:
          sys.stdout.write('\nSaving the file...\n')
          sys.stdout.flush()
-         self.save_records(dataset, v_data_in, "val_in")
-         self.save_records(dataset, v_data_out, "val_out")
+         self.save_records(dataset, v_data, "val")
 
    def create_numpy_records(self, dataset, files, dtype):
       """Creates numpy files of the given image paths
@@ -165,9 +211,8 @@ class Dataset(object):
       paths = [os.path.join(self.opts.dataset_dir, dataset,
          dtype, file) for file in files]
       
-      data_in  = np.empty([len(files), img_dim, img_dim, 3], dtype=np.uint8)
-      data_out = np.empty([len(files), img_dim, img_dim, 3], dtype=np.uint8)
-      
+      data = np.empty([len(files), 2, img_dim, img_dim, 3], dtype=np.uint8)
+
       for idx, file in enumerate(paths):
          sys.stdout.write('\r')
          percentage = (idx+1.)/len(files)
@@ -178,8 +223,8 @@ class Dataset(object):
 
          img = io.imread(file)
          img1, img2 = img[:, :split_len, :], img[:, split_len:, :]
-         data_in[idx], data_out[idx] = img1, img2
-      return data_in, data_out, True
+         data[idx, 0], data[idx, 1] = img1, img2
+      return data, True
 
    def save_records(self, dataset, data, dtype):
       """Saves the numpy record files for the given dataset

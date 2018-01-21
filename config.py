@@ -27,6 +27,7 @@ tf.app.flags.DEFINE_boolean('load_images', False, """Load images before run time
 # Training
 tf.app.flags.DEFINE_string('direction', "a2b", """a2b or b2a""")
 tf.app.flags.DEFINE_integer('batch_size', 1, """Batch size""")
+tf.app.flags.DEFINE_integer('g_update', 1, """update G this many times for one update of D""")
 tf.app.flags.DEFINE_integer('max_epochs', 1000, """Max iterations for training""")
 tf.app.flags.DEFINE_integer('ckpt_frq', 100, """Epoch frequency at which to checkpoint the model""")
 tf.app.flags.DEFINE_integer('gen_frq', 100, """Iteration frequency at which images are generated""")
@@ -37,7 +38,7 @@ tf.app.flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 tf.app.flags.DEFINE_float('lr_decay', 0.9, """Learning rate decay factor""")
 tf.app.flags.DEFINE_float('base_lr', 0.0002, """Base learning rate for VAE""")
 tf.app.flags.DEFINE_boolean('train', False, """Training or testing""")
-tf.app.flags.DEFINE_string('resume', "", """Resume the training by specifying ckpt file""")
+tf.app.flags.DEFINE_boolean('resume', "", """Resume the training by specifying ckpt file""")
 
 # Loss specific
 tf.app.flags.DEFINE_float('lambda_img', 10, """Parameter to balance the loss""")
@@ -52,6 +53,7 @@ tf.app.flags.DEFINE_string('summary_dir', summary_dir, """Summaries directory in
 tf.app.flags.DEFINE_string('e_type', 'normal', """Type of the network, {normal or residual}""")
 tf.app.flags.DEFINE_integer('e_layers', 5, """Number of layers in the encoder network""")
 tf.app.flags.DEFINE_integer('e_kernels', 64, """Number of kernels for the first layer of encoder""")
+tf.app.flags.DEFINE_integer('e_blocks', 4, """Number of residual blocks for encoder""")
 tf.app.flags.DEFINE_string('e_nonlin', 'lrelu', """Type of non-linearity for the encoder network {relu or lrelu}""")
 tf.app.flags.DEFINE_boolean('e_norm', True, """Should use batchnormalization for Encoder?""")
 # Generator
