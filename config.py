@@ -59,7 +59,7 @@ tf.app.flags.DEFINE_boolean('e_norm', True, """Should use batchnormalization for
 # Generator
 tf.app.flags.DEFINE_string('where_add', 'input', """Where to concatenate the noise the generator network {input or all}""")
 tf.app.flags.DEFINE_integer('g_layers', 3, """Number of layers in the generator network""")
-tf.app.flags.DEFINE_integer('g_kernels', 64, """Number of kernels for the first layer of generator""")
+tf.app.flags.DEFINE_integer('g_kernels', 32, """Number of kernels for the first layer of generator""")
 tf.app.flags.DEFINE_string('g_nonlin', 'relu', """Type of non-linearity for the generator network {relu or lrelu}""")
 tf.app.flags.DEFINE_boolean('g_norm', True, """Should use batchnormalization for Generator?""")
 # Discriminator
