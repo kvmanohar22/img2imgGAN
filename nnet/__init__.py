@@ -183,6 +183,9 @@ class Model(object):
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
 
+      if not self.opts.full_summaries:
+         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
+
       try:
         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
       except:
@@ -215,7 +218,6 @@ class Model(object):
                kernels=kernels, non_lin=non_lin, num_blocks=num_blocks, reuse=reuse)
          else:
             raise ValueError("No such type of encoder exists!")
-
 
    def normal_encoder(self, image, num_layers=4, output_neurons=1, kernels=64, non_lin='lrelu',
                       norm=None, reuse=False):
@@ -259,7 +261,6 @@ class Model(object):
          activation_summary(self.e_layers['full_logvar'])
 
       return self.e_layers['full_mean'], tf.exp(0.5 * self.e_layers['full_logvar'])
-
 
    def resnet_encoder(self, image, num_layers=4, num_blocks=4, output_neurons=1,
                       kernels=64, non_lin='relu', norm=None, reuse=False):
@@ -701,11 +702,17 @@ class Model(object):
                   utils.imwrite(os.path.join(
                           self.opts.sample_dir, 'iter_{}_cVAE'.format(iteration)),
                           images_cvae, inv_normalize=True)
+               elif self.opts.model == 'cvae-gan':
+                  images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+               elif self.opts.model == 'clr-gan':
+                  images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
                else:
-                  images = self.G.eval(session=self.sess, feed_dict=feed_dict)
-                  utils.imwrite(os.path.join(
-                          self.opts.sample_dir, 'iter_{}'.format(iteration)),
-                          images, inv_normalize=True)
+                  raise ValueError("No such type of model exists")
+
+               if self.opts.model is not 'bicycle':
+                 utils.imwrite(os.path.join(
+                         self.opts.sample_dir, 'iter_{}'.format(iteration)),
+                         images, inv_normalize=True)
 
             batch_num += 1
 
