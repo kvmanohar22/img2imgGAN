@@ -20,12 +20,13 @@ def main(_):
       dataset.create_records(FLAGS.create)
       exit()
 
-   priliminary_checks(FLAGS)
-   idx = get_runid(FLAGS)
-   create_rundirs(FLAGS, idx)
-   dump_model_params(FLAGS)
+   if FLAGS.train or FLAGS.resume:
+      priliminary_checks(FLAGS)
+      idx = get_runid(FLAGS)
+      create_rundirs(FLAGS, idx)
+      dump_model_params(FLAGS)
 
-   log_config(idx, FLAGS.__flags)
+      log_config(idx, FLAGS.__flags)
 
    if FLAGS.archi:
       net = nnet.Model(FLAGS, is_training=False)
@@ -43,7 +44,8 @@ def main(_):
    else:
       print ' - Testing the model...'
       net = nnet.Model(FLAGS, is_training=False)
-      net.test(FLAGS.test_source)
+      net.test()
+      exit()
 
 if __name__ == '__main__':
    try:

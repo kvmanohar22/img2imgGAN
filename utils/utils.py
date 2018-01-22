@@ -72,13 +72,9 @@ def imwrite(image_path, images, inv_normalize=False):
       inv_normalize: Should inverse normalize the images before
                      writing to the file
    """
-   try:
-      io.imsave(image_path, images)
-   except:
-      for idx, img in enumerate(images):
-         if inv_normalize:
-            img = inverse_normalize_images(img)
-         imsave(image_path+'_{}.png'.format(idx), img)
+   if inv_normalize:
+      images = inverse_normalize_images(images)
+   io.imsave(image_path, images)
 
 def normalize_images(images):
    """Normalizes images into the range [-1, 1]

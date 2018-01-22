@@ -62,7 +62,6 @@ class Model(object):
          self.G  = self.generator(self.input_images, self.gen_input_noise, self.opts.g_layers,
                                   self.opts.g_kernels, self.opts.g_nonlin,
                                   norm=self.opts.g_norm)
-         print 'here'
          self.E_mean, self.E_std  = self.encoder(self.G, self.opts.e_layers, self.opts.e_kernels,
                                                  self.opts.e_nonlin, norm=self.opts.e_norm,
                                                  num_blocks=self.opts.e_blocks, reuse=False)
@@ -109,9 +108,10 @@ class Model(object):
       self.d_vars = [var for var in self.variables if 'discriminator' in var.name]
       self.ge_vars = [var for var in self.variables if 'generator' or 'encoder' in var.name]
       self.model_loss()
-      self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
-      self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
+      self.D_opt = tf.train.AdamOptimizer(self.lr).minimize(self.d_loss, var_list=self.d_vars)
+      self.GE_opt = tf.train.AdamOptimizer(self.lr).minimize(self.g_loss, var_list=self.ge_vars)
       self.summaries()
+      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
 
 
    def allocate_placeholders(self):
@@ -122,6 +122,7 @@ class Model(object):
       self.images_B = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_B")
       self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
       self.is_training = tf.placeholder(tf.bool, name='is_training')
+      self.lr = tf.placeholder(tf.float32, [], name='learning_rate')
       if self.opts.direction == 'a2b':
          self.input_images  = self.images_A
          self.target_images = self.images_B
@@ -177,9 +178,10 @@ class Model(object):
       d_loss_real = tf.summary.scalar('D_loss_real', self.loss['D_real_loss'])
       d_loss = tf.summary.scalar('D_loss', self.d_loss)
       g_loss = tf.summary.scalar('G_loss', self.g_loss)
-      self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
+      lr_func = tf.summary.scalar('Learning_rate', self.lr)
+      self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, d_loss]) # z_summary
       if self.opts.model == 'bicycle':
-         self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+gen_images)
+         self.g_summaries = tf.summary.merge([g_loss, lr_func])#, images_A, images_B]+gen_images)
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
 
@@ -190,6 +192,15 @@ class Model(object):
         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
       except:
         pass
+
+
+   def get_learning_factor(self, epoch):
+    """Gets the factor to multiply the learning rate with
+
+    Args:
+        epoch: epoch number 
+    """
+    return 1.0 - max(0, epoch-self.opts.niter) / float(self.opts.niter_decay+1)
 
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
@@ -281,7 +292,8 @@ class Model(object):
         input_layer = self.e_layers['block_{}'.format(idx)]
         input_channels = self.e_layers['block_{}'.format(idx)].get_shape().as_list()[-1]
 
-      self.e_layers['pool'] = average_pool(self.e_layers['block_{}'.format(num_blocks-1)],
+      self.e_layers['non_lin'] = lrelu(self.e_layers['block_{}'.format(num_blocks-1)])
+      self.e_layers['pool'] = average_pool(self.e_layers['non_lin'],
          ksize=8, stride=8, name='pool')
       if not self.opts.full_summaries:
          activation_summary(self.e_layers['pool'])
@@ -615,15 +627,14 @@ class Model(object):
       """Train the network
       """
       self.test_graph()
-      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
       data = Dataset(self.opts, load=True)
 
       if self.opts.resume:
-        try:
-          self.saver.restore(self.sess, self.opts.ckpt)
-          print ' - Successfully restored the checkpoint: {}'.format(self.opts.ckpt)
-        except:
-          raise ValueError(" - Cannot restore the checkpoint file: {}".format(self.opts.ckpt))
+        # try:
+        self.saver.restore(self.sess, self.opts.ckpt)
+        print ' - Successfully restored the checkpoint: {}'.format(self.opts.ckpt)
+        # except:
+          # raise ValueError(" - Cannot restore the checkpoint file: {}".format(self.opts.ckpt))
       else:
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
@@ -637,8 +648,9 @@ class Model(object):
                                           self.opts.code_len]).astype(np.float32)
       start_time = datetime.now()
       print ' - Training the network...\n'
-      for epoch in xrange(1, self.opts.max_epochs):
+      for epoch in xrange(1, self.opts.niter+self.opts.niter_decay+1):
          batch_num = 0
+         lr_factor = self.get_learning_factor(epoch)
          for batch_begin, batch_end in zip(xrange(0, data.train_size(),
             self.opts.batch_size), xrange(self.opts.batch_size, data.train_size()+1,
             self.opts.batch_size)):
@@ -655,7 +667,8 @@ class Model(object):
             feed_dict = {self.images_A: images_A,
                          self.images_B: images_B,
                          self.code: code,
-                         self.is_training: True
+                         self.is_training: True,
+                         self.lr: self.opts.base_lr*lr_factor
                         }
             _, d_loss, d_summaries, d_fake, d_real = self.sess.run(
                     [self.D_opt, self.d_loss, self.d_summaries,
@@ -669,7 +682,8 @@ class Model(object):
             feed_dict = {self.images_A: images_A,
                          self.images_B: images_B,
                          self.code: code,
-                         self.is_training: True
+                         self.is_training: True,
+                         self.lr: self.opts.base_lr*lr_factor
                         }
 
             for i in xrange(self.opts.g_update):
@@ -677,12 +691,16 @@ class Model(object):
                       [self.GE_opt, self.g_summaries,
                        self.g_loss], feed_dict=feed_dict)
               self.writer.add_summary(g_summaries, iteration)
-              self.writer.add_summary(sparsity_sum, iteration)
+
+              try:
+                self.writer.add_summary(sparsity_sum, iteration)
+              except:
+                pass
 
             elapsed_time = datetime.now() - start_time
-            print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
+            print formatter.format(elapsed_time, epoch, self.opts.niter+self.opts.niter_decay+1,
                                    batch_num+1, data.train_size()/self.opts.batch_size,
-                                   self.opts.base_lr, d_fake, d_real, d_fake + d_real,
+                                   self.opts.base_lr*lr_factor, d_fake, d_real, d_fake + d_real,
                                    g_loss)
 
             # Sample the images
@@ -691,7 +709,8 @@ class Model(object):
                feed_dict = {self.images_A: images_A,
                             self.images_B: images_B,
                             self.code: runtime_z,
-                            self.is_training: False
+                            self.is_training: False,
+                            self.lr: self.opts.base_lr*lr_factor
                             }
                if self.opts.model == 'bicycle':
                   images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
@@ -709,7 +728,7 @@ class Model(object):
                else:
                   raise ValueError("No such type of model exists")
 
-               if self.opts.model is not 'bicycle':
+               if self.opts.model != 'bicycle':
                  utils.imwrite(os.path.join(
                          self.opts.sample_dir, 'iter_{}'.format(iteration)),
                          images, inv_normalize=True)
@@ -738,7 +757,7 @@ class Model(object):
                                           graph=self.sess.graph)
 
 
-   def test(self, source):
+   def test(self, source='data/facades/train/351.jpg'):
       """Test the model
 
       Args:
@@ -749,7 +768,7 @@ class Model(object):
       """
       split_len = 600 if self.opts.dataset == 'maps' else 256
 
-      img = utils.imread(source)
+      img = utils.normalize_images(utils.imread(source)).astype(np.float32)
       img_A = img[:, :split_len, :]
       img_B = img[:, split_len:, :]
       if self.opts.direction == 'b2a':
@@ -759,14 +778,14 @@ class Model(object):
         input_images = img_A
         target_images = img_B
 
-      try:
-        self.saver.restore(self.sess, self.opts.ckpt)
-      except:
-        raise ValueError("Couldn't restore the model from the checkpoint: {}".format(self.opts.ckpt))
+      self.saver.restore(self.sess, self.opts.ckpt)
       utils.imwrite(os.path.join(
-              self.opts.sample_dir, '../target_images'),
-              target_images, inv_normalize=False)
+              self.opts.sample_dir, '../target_images.png'),
+              target_images, inv_normalize=True)
 
+      A = np.expand_dims(img_A, 0)
+      B = np.expand_dims(img_B, 0)
+      print ' - Sampling the images for {} different latent vectors...'.format(self.opts.sample_num)
       for idx in xrange(self.opts.sample_num):
         code = np.random.uniform(low=-1.0,
                                  high=1.0,
@@ -774,15 +793,15 @@ class Model(object):
                                        self.opts.code_len]).astype(np.float32)
         feed_dict = {
           self.is_training: False,
-          self.images_A: img_A,
-          self.images_B: img_B,
+          self.images_A: A,
+          self.images_B: B,
           self.code: code
         }
         if self.opts.model == 'bicycle':
-          images = self.G_vae.eval(session=self.sess, feed_dict=feed_dict)
+          # images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
           images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
           utils.imwrite(os.path.join(
-                  self.opts.sample_dir, '../test_{}'.format(idx)),
-                  images, inv_normalize=True)
+                  self.opts.sample_dir, '../test_{}.png'.format(idx+1)),
+                  images[0], inv_normalize=True)
         else:
           raise ValueError("Testing only possible for bicycleGAN")

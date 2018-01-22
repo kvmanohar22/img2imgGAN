@@ -634,8 +634,7 @@ def residual_block_v2(input, out_channels, is_training, stride=1,
                            name='conv2', reuse=reuse)
       # AveragePool
       pool1 = average_pool(conv2, ksize=2, stride=2)
-      output = add_layers(short_conv, pool1, name=name+'_add')
-      output = relu(output)
+      output = add_layers(short_conv, pool1)
 
       return output
 
