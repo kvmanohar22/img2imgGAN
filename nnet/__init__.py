@@ -260,7 +260,8 @@ class Model(object):
          activation_summary(self.e_layers['pool'])
 
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
-      reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
+      transposed = tf.transpose(self.e_layers['pool'], (0, 3, 1, 2))
+      reshape_layer = tf.reshape(transposed, [-1, units])
       self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean',
                                                    reuse=reuse)
       # This layers predicts the `log(var)`, to get the std,
@@ -299,7 +300,8 @@ class Model(object):
          activation_summary(self.e_layers['pool'])
 
       units = int(np.prod(self.e_layers['pool'].get_shape().as_list()[1:]))
-      reshape_layer = tf.reshape(self.e_layers['pool'], [-1, units])
+      transposed = tf.transpose(self.e_layers['pool'], (0, 3, 1, 2))
+      reshape_layer = tf.reshape(transposed, [-1, units])
       self.e_layers['full_mean'] = fully_connected(reshape_layer, output_neurons, name='full_mean',
                                                    reuse=reuse)
       self.e_layers['full_logvar'] = fully_connected(reshape_layer, output_neurons, name='full_logvar',
