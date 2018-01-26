@@ -3,6 +3,7 @@
 """
 
 import tensorflow as tf
+import numpy as np
 
 
 def weight_init(shape, name=None,
@@ -685,3 +686,31 @@ def activation_summary(tensor, collection='hist_spar'):
 
    tf.add_to_collection(collection, hist_summary)
    tf.add_to_collection(collection, spar_summary)
+
+
+def gaussian_noise(size, mean=0., std=1.):
+   """Samples from a gaussian distribution
+
+   Args:
+      size: Size of the output array
+      mean: Mean of the noise
+      std : Standard deviation of the noise
+   """
+   return np.random.normal(loc=mean,
+                           scale=std,
+                           size=size
+                           ).astype(np.float32)
+
+
+def uniform_noise(size, low=-1., high=1.):
+   """Samples from a uniform distribution
+
+   Args:
+      size: Size of the output array
+      low : Lower limit
+      high: Upper limit
+   """
+   return np.random.uniform(low=low,
+                            high=high,
+                            size=size
+                            ).astype(np.float32)
