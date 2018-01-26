@@ -41,7 +41,7 @@ class Dataset(object):
             self.t_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
-                                 'train.txt'))[:100]
+                                 'train.txt'))[:50]
             self.v_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,

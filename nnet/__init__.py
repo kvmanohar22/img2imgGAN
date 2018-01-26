@@ -677,7 +677,6 @@ class Model(object):
                       [self.GE_opt, self.g_summaries,
                        self.g_loss], feed_dict=feed_dict)
               self.writer.add_summary(g_summaries, iteration)
-              self.writer.add_summary(sparsity_sum, iteration)
 
             elapsed_time = datetime.now() - start_time
             print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
@@ -709,7 +708,7 @@ class Model(object):
                else:
                   raise ValueError("No such type of model exists")
 
-               if self.opts.model is not 'bicycle':
+               if self.opts.model != 'bicycle':
                  utils.imwrite(os.path.join(
                          self.opts.sample_dir, 'iter_{}'.format(iteration)),
                          images, inv_normalize=True)
