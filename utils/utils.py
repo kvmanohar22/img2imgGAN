@@ -73,7 +73,7 @@ def imwrite(image_path, images, inv_normalize=False):
                      writing to the file
    """
    try:
-      io.imsave(image_path, images)
+      imsave(image_path, images)
    except:
       for idx, img in enumerate(images):
          if inv_normalize:

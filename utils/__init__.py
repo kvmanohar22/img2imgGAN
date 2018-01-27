@@ -41,7 +41,7 @@ class Dataset(object):
             self.t_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
-                                 'train.txt'))[:50]
+                                 'train.txt'))
             self.v_image_paths = utils.read_file_lines(
                     os.path.join(opts.dataset_dir,
                                  opts.dataset,
@@ -71,7 +71,8 @@ class Dataset(object):
       img_dim = self.opts.h
       images_A = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
       images_B = np.empty([self.opts.batch_size, img_dim, img_dim, 3], dtype=np.float32)
-      for idx, path in enumerate(self.v_image_paths[:self.opts.batch_size]):
+      np.random.shuffle(self.v_image_paths)
+      for idx, path in enumerate(self.v_image_paths[:self.opts.sample_num]):
          path = os.path.join(self.opts.dataset_dir, self.opts.dataset, 'val', path)
          try:
             image = utils.imread(path)

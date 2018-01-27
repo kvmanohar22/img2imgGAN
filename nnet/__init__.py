@@ -6,6 +6,7 @@ from datetime import datetime
 import numpy as np
 import os
 import sys
+import time
 
 from modules import *
 from utils import Dataset
@@ -122,6 +123,7 @@ class Model(object):
       self.images_B = tf.placeholder(tf.float32, [None, self.h, self.w, self.c], name="images_B")
       self.code = tf.placeholder(tf.float32, [None, self.opts.code_len], name="code")
       self.is_training = tf.placeholder(tf.bool, name='is_training')
+      self.lr = tf.placeholder(tf.float32, [], name="lr")
       if self.opts.direction == 'a2b':
          self.input_images  = self.images_A
          self.target_images = self.images_B
@@ -167,9 +169,9 @@ class Model(object):
       if self.opts.model == 'bicycle':
          gen_images_cvae = tf.summary.image('Gen_images_cVAE', self.G_cvae, max_outputs=10)
          gen_images_clr  = tf.summary.image('Gen_images_cLR', self.G_clr, max_outputs=10)
-         gen_images = [gen_images_clr, gen_images_cvae]
+         self.gen_images = tf.summary.merge([gen_images_clr, gen_images_cvae])
       else:
-         gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
+         self.gen_images = tf.summary.image('Gen_images', self.G, max_outputs=10)
 
       # Loss
       z_summary = tf.summary.histogram('z', self.code)
@@ -177,9 +179,10 @@ class Model(object):
       d_loss_real = tf.summary.scalar('D_loss_real', self.loss['D_real_loss'])
       d_loss = tf.summary.scalar('D_loss', self.d_loss)
       g_loss = tf.summary.scalar('G_loss', self.g_loss)
+      lr = tf.summary.scalar('learning_rate', self.lr)
       self.d_summaries = tf.summary.merge([d_loss_fake, d_loss_real, z_summary, d_loss])
       if self.opts.model == 'bicycle':
-         self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+gen_images)
+         self.g_summaries = tf.summary.merge([g_loss, lr])
       else:
          self.g_summaries = tf.summary.merge([g_loss, images_A, images_B]+[gen_images])
 
@@ -190,6 +193,14 @@ class Model(object):
         self.act_sparsity = tf.summary.merge(tf.get_collection('hist_spar'))
       except:
         pass
+
+   def get_learning_factor(self, epoch):
+      """Gets the factor to multiply the learning rate with
+      
+      Args:
+        epoch: epoch number 
+      """
+      return 1.0 - max(0, epoch-self.opts.niter) / float(self.opts.niter_decay+1)
 
 
    def encoder(self, image, num_layers=3, kernels=64, non_lin='lrelu', norm=None,
@@ -616,7 +627,7 @@ class Model(object):
       """
       self.test_graph()
       self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
-      data = Dataset(self.opts, load=True)
+      self.data = Dataset(self.opts, load=True)
 
       if self.opts.resume:
         try:
@@ -628,35 +639,43 @@ class Model(object):
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
 
-      formatter =  "Elapsed Time: {}  Epoch: [{:3d}/{:4d}]  Batch: [{:3d}/{:3d}]  LR: {:.5f}  "
+      formatter =  "{} Elapsed Time: {}  Epoch: [{:2d}/{:2d}]  Batch: [{:4d}/{:4d}]  LR: {:.5f}  "
       formatter += "D_fake_loss: {:.5f}  D_real_loss: {:.5f}  D_loss: {:.5f}  G_loss: {:.5f}"
 
-      runtime_z = np.random.uniform(low=-1,
-                                    high=1,
-                                    size=[self.opts.sample_num,
-                                          self.opts.code_len]).astype(np.float32)
+      if self.opts.noise_type == "gauss":
+        runtime_z = gaussian_noise([self.opts.sample_num, self.opts.code_len])
+      elif self.opts.noise_type == "uniform":
+        runtime_z = uniform_noise([self.opts.sample_num, self.opts.code_len])
+      else:
+        raise ValueError("No such type of noise is present !")
+
       start_time = datetime.now()
       print ' - Training the network...\n'
-      for epoch in xrange(1, self.opts.max_epochs):
+      for epoch in xrange(0, self.opts.niter+self.opts.niter_decay+1):
          batch_num = 0
-         for batch_begin, batch_end in zip(xrange(0, data.train_size(),
-            self.opts.batch_size), xrange(self.opts.batch_size, data.train_size()+1,
+         lr_factor = self.get_learning_factor(epoch)
+         for batch_begin, batch_end in zip(xrange(0, self.data.train_size(),
+            self.opts.batch_size), xrange(self.opts.batch_size, self.data.train_size()+1,
             self.opts.batch_size)):
 
-            iteration = epoch * (data.train_size()/self.opts.batch_size) + batch_num
-            images_A, images_B = data.load_batch(batch_begin, batch_end)
+            iteration = epoch * (self.data.train_size()/self.opts.batch_size) + batch_num
+            images_A, images_B = self.data.load_batch(batch_begin, batch_end)
 
-            code = np.random.uniform(low=-1.0,
-                                     high=1.0,
-                                     size=[self.opts.batch_size,
-                                           self.opts.code_len]).astype(np.float32)
+            if self.opts.noise_type == "gauss":
+              code = gaussian_noise([self.opts.sample_num, self.opts.code_len])
+            elif self.opts.noise_type == "uniform":
+              code = uniform_noise([self.opts.sample_num, self.opts.code_len])
+            else:
+              raise ValueError("No such type of noise is present !")
 
             # Update Discriminator
-            feed_dict = {self.images_A: images_A,
-                         self.images_B: images_B,
-                         self.code: code,
-                         self.is_training: True
-                        }
+            feed_dict = {
+              self.images_A: images_A,
+              self.images_B: images_B,
+              self.code: code,
+              self.is_training: True,
+              self.lr: self.opts.base_lr*lr_factor
+            }
             _, d_loss, d_summaries, d_fake, d_real = self.sess.run(
                     [self.D_opt, self.d_loss, self.d_summaries,
                      self.loss['D_fake_loss'],
@@ -666,11 +685,13 @@ class Model(object):
             self.writer.add_summary(d_summaries, iteration)
 
             # Update Generator and Encoder
-            feed_dict = {self.images_A: images_A,
-                         self.images_B: images_B,
-                         self.code: code,
-                         self.is_training: True
-                        }
+            feed_dict = {
+              self.images_A: images_A,
+              self.images_B: images_B,
+              self.code: code,
+              self.is_training: True,
+              self.lr: self.opts.base_lr*lr_factor
+              }
 
             for i in xrange(self.opts.g_update):
               _, g_summaries, g_loss = self.sess.run(
@@ -679,22 +700,26 @@ class Model(object):
               self.writer.add_summary(g_summaries, iteration)
 
             elapsed_time = datetime.now() - start_time
-            print formatter.format(elapsed_time, epoch, self.opts.max_epochs,
-                                   batch_num+1, data.train_size()/self.opts.batch_size,
+            curr_time = datetime.fromtimestamp(int(time.time())).strftime('%d-%m-%Y %H:%M:%S')
+            print formatter.format(curr_time, elapsed_time, epoch, self.opts.niter+self.opts.niter_decay+1,
+                                   batch_num+1, self.data.train_size()/self.opts.batch_size,
                                    self.opts.base_lr, d_fake, d_real, d_fake + d_real,
                                    g_loss)
 
             # Sample the images
             if np.mod(iteration, self.opts.gen_frq) == 0:
                print ' - [Sampling the images...]'
-               feed_dict = {self.images_A: images_A,
-                            self.images_B: images_B,
-                            self.code: runtime_z,
-                            self.is_training: False
-                            }
+               feed_dict = {
+                  self.images_A: images_A,
+                  self.images_B: images_B,
+                  self.code: runtime_z,
+                  self.is_training: False,
+                  self.lr: self.opts.base_lr*lr_factor
+               }
                if self.opts.model == 'bicycle':
                   images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
                   images_clr  = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+
                   utils.imwrite(os.path.join(
                           self.opts.sample_dir, 'iter_{}_cLR'.format(iteration)),
                           images_clr, inv_normalize=True)
@@ -709,15 +734,58 @@ class Model(object):
                   raise ValueError("No such type of model exists")
 
                if self.opts.model != 'bicycle':
-                 utils.imwrite(os.path.join(
-                         self.opts.sample_dir, 'iter_{}'.format(iteration)),
-                         images, inv_normalize=True)
+                  utils.imwrite(os.path.join(
+                                self.opts.sample_dir, 'iter_{}'.format(iteration)),
+                                images, inv_normalize=True)
+
+            # Validate the model
+            if np.mod(iteration, self.opts.gen_frq*10) == 0:
+              self.validate(iteration)
 
             batch_num += 1
 
          if np.mod(epoch, self.opts.ckpt_frq) == 0:
             self.checkpoint(epoch)
       self.sess.close()
+
+
+   def validate(self, iteration):
+      """Validates"""
+      print ' - Validating the model at iteration: {}'.format(iteration)
+
+      images_A, images_B = self.data.load_val_batch()
+      for i in xrange(3):
+        print ' - Validating with latent vector #{}'.format(i)
+        if self.opts.noise_type == "gauss":
+          sample_z = gaussian_noise([self.opts.sample_num, self.opts.code_len])
+        elif self.opts.noise_type == "uniform":
+          sample_z = uniform_noise([self.opts.sample_num, self.opts.code_len])
+        else:
+          raise ValueError("No such type of noise is present !")
+
+        feed_dict = {
+          self.images_A: images_A,
+          self.images_B: images_B,
+          self.code: sample_z,
+          self.is_training: False,
+        }
+        gen_image_summaries = self.gen_images.eval(session=self.sess, feed_dict=feed_dict)
+        self.writer.add_summary(gen_image_summaries, iteration)
+
+        images_clr  = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+        images_cvae = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
+        utils.imwrite(os.path.join(
+                self.opts.sample_dir, 'VAL_{}_ground_truth_A'.format(iteration)),
+                images_A, inv_normalize=True)
+        utils.imwrite(os.path.join(
+                self.opts.sample_dir, 'VAL_{}_ground_truth_B'.format(iteration)),
+                images_B, inv_normalize=True)
+        utils.imwrite(os.path.join(
+                self.opts.sample_dir, 'VAL_{}_cLR'.format(iteration)),
+                images_clr, inv_normalize=True)
+        utils.imwrite(os.path.join(
+                self.opts.sample_dir, 'VAL_{}_cVAE'.format(iteration)),
+                images_cvae, inv_normalize=True)
 
 
    def checkpoint(self, epoch):
@@ -764,13 +832,13 @@ class Model(object):
         raise ValueError("Couldn't restore the model from the checkpoint: {}".format(self.opts.ckpt))
       utils.imwrite(os.path.join(
               self.opts.sample_dir, '../target_images'),
-              target_images, inv_normalize=False)
+              target_images, inv_normalize=True)
 
       for idx in xrange(self.opts.sample_num):
-        code = np.random.uniform(low=-1.0,
-                                 high=1.0,
-                                 size=[1,
-                                       self.opts.code_len]).astype(np.float32)
+        if self.opts.noise_type == "gauss":
+          code = gaussian_noise([self.opts.sample_num, self.opts.code_len])
+        else:
+          code = uniform_noise([self.opts.sample_num, self.opts.code_len])
         feed_dict = {
           self.is_training: False,
           self.images_A: img_A,
