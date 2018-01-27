@@ -35,6 +35,8 @@ tf.app.flags.DEFINE_integer('gen_frq', 100, """Iteration frequency at which imag
 tf.app.flags.DEFINE_integer('train_size', 10000, """The total training size""")
 tf.app.flags.DEFINE_integer('display', 1, """Display log of progress""")
 tf.app.flags.DEFINE_integer('code_len', 8, """Length of latent dimension""")
+tf.app.flags.DEFINE_integer('niter', 30, """Model trained with starting learning rate until this many epochs""")
+tf.app.flags.DEFINE_integer('niter_decay', 30, """Reduce the learning rate linearly until it becomes zero""")
 tf.app.flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 tf.app.flags.DEFINE_float('lr_decay', 0.9, """Learning rate decay factor""")
 tf.app.flags.DEFINE_float('base_lr', 0.0002, """Base learning rate for VAE""")

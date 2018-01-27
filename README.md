@@ -35,18 +35,6 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 <a name='cvae'></a>
 ### cVAE-GAN Network
 
-![](imgs/cvae-gan.gif)
-
-<a name='clr'></a>
-### cLR-GAN Network
-
-![](imgs/clr-gan.gif)
-
-<a name='bicycle'></a>
-### Bicycle Network
-
-![](imgs/bicycle.gif)
-
 <a name='depends'></a>
 # Dependencies
 
