@@ -34,6 +34,7 @@ Implementation of the paper : "Toward Multimodal Image-to-Image Translation"
 
 <a name='cvae'></a>
 ### cVAE-GAN Network
+![](imgs/cvae-gan.gif)
 
 <a name='depends'></a>
 # Dependencies
