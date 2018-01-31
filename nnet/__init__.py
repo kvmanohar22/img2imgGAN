@@ -113,6 +113,7 @@ class Model(object):
       self.D_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.d_loss, var_list=self.d_vars)
       self.GE_opt = tf.train.AdamOptimizer(self.opts.base_lr).minimize(self.g_loss, var_list=self.ge_vars)
       self.summaries()
+      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
 
 
    def allocate_placeholders(self):
@@ -626,7 +627,6 @@ class Model(object):
       """Train the network
       """
       self.test_graph()
-      self.saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
       self.data = Dataset(self.opts, load=True)
 
       if self.opts.resume:
@@ -816,9 +816,11 @@ class Model(object):
       """
       split_len = 600 if self.opts.dataset == 'maps' else 256
 
-      img = utils.imread(source)
+      img = utils.normalize_images(utils.imread(source))
       img_A = img[:, :split_len, :]
       img_B = img[:, split_len:, :]
+      img_A = np.expand_dims(img_A, 0)
+      img_B = np.expand_dims(img_B, 0)
       if self.opts.direction == 'b2a':
         input_images = img_B
         target_images = img_A
@@ -826,19 +828,17 @@ class Model(object):
         input_images = img_A
         target_images = img_B
 
-      try:
-        self.saver.restore(self.sess, self.opts.ckpt)
-      except:
-        raise ValueError("Couldn't restore the model from the checkpoint: {}".format(self.opts.ckpt))
+      self.saver.restore(self.sess, self.opts.ckpt)
       utils.imwrite(os.path.join(
               self.opts.sample_dir, '../target_images'),
-              target_images, inv_normalize=True)
+              target_images[0], inv_normalize=True)
 
       for idx in xrange(self.opts.sample_num):
+        print 'Sampling #', idx
         if self.opts.noise_type == "gauss":
-          code = gaussian_noise([self.opts.sample_num, self.opts.code_len])
+          code = gaussian_noise([1, self.opts.code_len])
         else:
-          code = uniform_noise([self.opts.sample_num, self.opts.code_len])
+          code = uniform_noise([1, self.opts.code_len])
         feed_dict = {
           self.is_training: False,
           self.images_A: img_A,
@@ -846,10 +846,13 @@ class Model(object):
           self.code: code
         }
         if self.opts.model == 'bicycle':
-          images = self.G_vae.eval(session=self.sess, feed_dict=feed_dict)
-          images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
+          images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)[0]
           utils.imwrite(os.path.join(
-                  self.opts.sample_dir, '../test_{}'.format(idx)),
+                  self.opts.sample_dir, '../test_cvae{}'.format(idx)),
+                  images, inv_normalize=True)
+          images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)[0]
+          utils.imwrite(os.path.join(
+                  self.opts.sample_dir, '../test_clr{}'.format(idx)),
                   images, inv_normalize=True)
         else:
           raise ValueError("Testing only possible for bicycleGAN")

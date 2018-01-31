@@ -74,6 +74,7 @@ tf.app.flags.DEFINE_integer('d_kernels', 64, """Number of kernels for the first 
 tf.app.flags.DEFINE_boolean('d_sigmoid', True, """Should use sigmoid for the final layer for Discriminator?""")
 
 # Testing
+tf.app.flags.DEFINE_boolean('test', False, """Test the model""")
 tf.app.flags.DEFINE_string('ckpt', '', """Checkpoint to load to test the model""")
 tf.app.flags.DEFINE_string('test_source', '', """Path to input image/directory to test the network""")
 tf.app.flags.DEFINE_integer('sample_num', 1, """Number of images to sample at test time""")

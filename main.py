@@ -20,12 +20,13 @@ def main(_):
       dataset.create_records(FLAGS.create)
       exit()
 
-   priliminary_checks(FLAGS)
-   idx = get_runid(FLAGS)
-   create_rundirs(FLAGS, idx)
-   dump_model_params(FLAGS)
+   if not FLAGS.test:
+      priliminary_checks(FLAGS)
+      idx = get_runid(FLAGS)
+      create_rundirs(FLAGS, idx)
+      dump_model_params(FLAGS)
+      log_config(idx, FLAGS.__flags)
 
-   log_config(idx, FLAGS.__flags)
 
    if FLAGS.archi:
       net = nnet.Model(FLAGS, is_training=False)
