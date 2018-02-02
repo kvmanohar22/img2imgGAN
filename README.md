@@ -143,7 +143,7 @@ $ sudo pip install -r requirements.txt
 
   To test the model from the given trained models,
   ```bash
-  $ python main.py --test --model cvae-gan --ckpt <path/to/ckpt> --test_source <path/to/img/dir>
+  $ ./test.sh <dataset_name> <test_image_path> <checkpoint_path>
   ```
 
 <a name='todo'></a>
@@ -151,6 +151,7 @@ $ sudo pip install -r requirements.txt
 - [x] Residual Encoder
 - [ ] Multiple discriminators for `cVAE-GAN` and `cLR-GAN`
 - [ ] Inducing noise to all the layers of the generator
+- [ ] Train the model on rest of the datasets
 
 <a name='licence'></a>
 # License
