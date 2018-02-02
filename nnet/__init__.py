@@ -839,6 +839,7 @@ class Model(object):
           code = gaussian_noise([1, self.opts.code_len])
         else:
           code = uniform_noise([1, self.opts.code_len])
+
         feed_dict = {
           self.is_training: False,
           self.images_A: img_A,

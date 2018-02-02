@@ -27,7 +27,6 @@ def main(_):
       dump_model_params(FLAGS)
       log_config(idx, FLAGS.__flags)
 
-
    if FLAGS.archi:
       net = nnet.Model(FLAGS, is_training=False)
       net.test_graph()

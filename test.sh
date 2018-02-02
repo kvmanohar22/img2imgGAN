@@ -35,3 +35,4 @@ python main.py --test \
 --batch_size 1 \
 --sample_num 5 \
 --ckpt ${CHECKPOINT_PATH} \
+--test_source ${TEST_IMG_PATH}
