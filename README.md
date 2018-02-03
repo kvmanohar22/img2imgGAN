@@ -8,40 +8,40 @@ Implementation of the paper : **Toward Multimodal Image-to-Image Translation**
 
 # Results
 <div class="fig figcenter fighighlight">
-  <img src="../imgs/g_0.png" width="23%" style="margin-right:3px;"> 
-  <img src="../imgs/t_0.png" width="23%" style="margin-right:2px;">
-  <img src="../imgs/cLR_0.png" width="23%" style="margin-right:3px;">
-  <img src="../imgs/cVAE_0.png" width="23%">
+  <img src="imgs/g_0.png" width="23%" style="margin-right:3px;"> 
+  <img src="imgs/t_0.png" width="23%" style="margin-right:2px;">
+  <img src="imgs/cLR_0.png" width="23%" style="margin-right:3px;">
+  <img src="imgs/cVAE_0.png" width="23%">
 </div>
 <div class="fig figcenter fighighlight">
-  <img src="../imgs/g_1.png" width="23%" style="margin-right:3px;"> 
-  <img src="../imgs/t_1.png" width="23%" style="margin-right:2px;">
-  <img src="../imgs/cLR_1.png" width="23%" style="margin-right:3px;">
-  <img src="../imgs/cVAE_1.png" width="23%">
+  <img src="imgs/g_1.png" width="23%" style="margin-right:3px;"> 
+  <img src="imgs/t_1.png" width="23%" style="margin-right:2px;">
+  <img src="imgs/cLR_1.png" width="23%" style="margin-right:3px;">
+  <img src="imgs/cVAE_1.png" width="23%">
 </div>
 <div class="fig figcenter fighighlight">
-  <img src="../imgs/g_2.png" width="23%" style="margin-right:3px;"> 
-  <img src="../imgs/t_2.png" width="23%" style="margin-right:2px;">
-  <img src="../imgs/cLR_2.png" width="23%" style="margin-right:3px;">
-  <img src="../imgs/cVAE_2.png" width="23%">
+  <img src="imgs/g_2.png" width="23%" style="margin-right:3px;"> 
+  <img src="imgs/t_2.png" width="23%" style="margin-right:2px;">
+  <img src="imgs/cLR_2.png" width="23%" style="margin-right:3px;">
+  <img src="imgs/cVAE_2.png" width="23%">
 </div>
 <div class="fig figcenter fighighlight">
-  <img src="../imgs/g_3.png" width="23%" style="margin-right:3px;"> 
-  <img src="../imgs/t_3.png" width="23%" style="margin-right:2px;">
-  <img src="../imgs/cLR_3.png" width="23%" style="margin-right:3px;">
-  <img src="../imgs/cVAE_3.png" width="23%">
+  <img src="imgs/g_3.png" width="23%" style="margin-right:3px;"> 
+  <img src="imgs/t_3.png" width="23%" style="margin-right:2px;">
+  <img src="imgs/cLR_3.png" width="23%" style="margin-right:3px;">
+  <img src="imgs/cVAE_3.png" width="23%">
 </div>
 <div class="fig figcenter fighighlight">
-  <img src="../imgs/g_4.png" width="23%" style="margin-right:3px;"> 
-  <img src="../imgs/t_4.png" width="23%" style="margin-right:2px;">
-  <img src="../imgs/cLR_4.png" width="23%" style="margin-right:3px;">
-  <img src="../imgs/cVAE_4.png" width="23%">
+  <img src="imgs/g_4.png" width="23%" style="margin-right:3px;"> 
+  <img src="imgs/t_4.png" width="23%" style="margin-right:2px;">
+  <img src="imgs/cLR_4.png" width="23%" style="margin-right:3px;">
+  <img src="imgs/cVAE_4.png" width="23%">
 </div>
 <div class="fig figcenter fighighlight">
-  <img src="../imgs/g_5.png" width="23%" style="margin-right:3px;"> 
-  <img src="../imgs/t_5.png" width="23%" style="margin-right:2px;">
-  <img src="../imgs/cLR_5.png" width="23%" style="margin-right:3px;">
-  <img src="../imgs/cVAE_5.png" width="23%">
+  <img src="imgs/g_5.png" width="23%" style="margin-right:3px;"> 
+  <img src="imgs/t_5.png" width="23%" style="margin-right:2px;">
+  <img src="imgs/cLR_5.png" width="23%" style="margin-right:3px;">
+  <img src="imgs/cVAE_5.png" width="23%">
 
   <div class="figcaption">
     <b>Result</b> First column represents input, second column the ground truth. The next is the image generated from <b>cLR-GAN</b> and the last column represents the image generated from <b>cVAE-GAN</b>. Results were obtained from validation dataset.
