@@ -61,6 +61,7 @@ Implementation of the paper : **Toward Multimodal Image-to-Image Translation**
     - [Generate Graph](#graph)
     - [Training the network](#train)
     - [Testing the network](#test)
+  - [Visualizations](#viz)
   - [TODO](#todo)
   - [Licence](#licence)
 
@@ -188,6 +189,16 @@ $ sudo pip install -r requirements.txt
   ```bash
   $ ./test.sh <dataset_name> <test_image_path> <checkpoint_path>
   ```
+
+<a name='viz'></a>
+# Visualizations
+Loss of discriminator and generator as function of iterations on `edges2shoes` dataset.
+
+![](imgs/loss/d_fake.png)
+![](imgs/loss/d_real.png)
+![](imgs/loss/d_loss.png)
+![](imgs/loss/g_loss.png)
+
 
 <a name='todo'></a>
 # TODO
