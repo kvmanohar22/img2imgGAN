@@ -185,6 +185,8 @@ $ sudo pip install -r requirements.txt
 <a name='test'></a>
 - Testing the network
 
+  - Download the checkpoint file from [here](https://drive.google.com/drive/folders/1rXgCU-HS7AnlTiNzKRl-eUL2qsWhrGs8?usp=sharing) and place the checkpoint files in the `ckpt` directory
+  
   To test the model from the given trained models,
   ```bash
   $ ./test.sh <dataset_name> <test_image_path> <checkpoint_path>
