@@ -830,9 +830,13 @@ class Model(object):
 
       self.saver.restore(self.sess, self.opts.ckpt)
       utils.imwrite(os.path.join(
-              self.opts.sample_dir, '../target_images'),
+              self.opts.target_dir, 'target_image'),
               target_images[0], inv_normalize=True)
+      utils.imwrite(os.path.join(
+              self.opts.target_dir, 'conditional_image'),
+              input_images[0], inv_normalize=True)
 
+      print ' - Sampling generator images for different random initial noise'
       for idx in xrange(self.opts.sample_num):
         print 'Sampling #', idx
         if self.opts.noise_type == "gauss":
@@ -847,13 +851,13 @@ class Model(object):
           self.code: code
         }
         if self.opts.model == 'bicycle':
-          images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)[0]
+          images = self.G_cvae.eval(session=self.sess, feed_dict=feed_dict)
           utils.imwrite(os.path.join(
-                  self.opts.sample_dir, '../test_cvae{}'.format(idx)),
+                  self.opts.target_dir, 'test_cvae{}'.format(idx)),
                   images, inv_normalize=True)
-          images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)[0]
+          images = self.G_clr.eval(session=self.sess, feed_dict=feed_dict)
           utils.imwrite(os.path.join(
-                  self.opts.sample_dir, '../test_clr{}'.format(idx)),
+                  self.opts.target_dir, 'test_clr{}'.format(idx)),
                   images, inv_normalize=True)
         else:
           raise ValueError("Testing only possible for bicycleGAN")

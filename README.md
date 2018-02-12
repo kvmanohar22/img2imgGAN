@@ -187,10 +187,17 @@ $ sudo pip install -r requirements.txt
 
   - Download the checkpoint file from [here](https://drive.google.com/drive/folders/1rXgCU-HS7AnlTiNzKRl-eUL2qsWhrGs8?usp=sharing) and place the checkpoint files in the `ckpt` directory
   
-  To test the model from the given trained models,
+  To test the model from the given trained models, by default the model generates 5 different images (by sampling 5 different noise samples)
   ```bash
-  $ ./test.sh <dataset_name> <test_image_path> <checkpoint_path>
+  $ ./test.sh <dataset_name> <test_image_path>
   ```
+
+  To generate multiple output samples,
+  ```bash
+  $ ./test.sh <dataset_name> <test_image_path> < # of samples>
+  ```
+
+  Try it with some of the test samples present in the directory `imgs/test`
 
 <a name='viz'></a>
 # Visualizations
